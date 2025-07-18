@@ -123,6 +123,7 @@
                 <span id="lidAngleValue">0</span>
             </div>
         </div>
+
     </div>
 
     <canvas id="hingeCanvas" width="900" height="600"></canvas>
@@ -133,6 +134,17 @@
         <div id="statusIndicator" class="status-indicator status-good">Configuration Valid</div>
     </div>
 
-    <script src="crossHinge.js"></script>
+    <!-- Using clean version with FPS throttling and no duplicate methods -->
+    <script src="throttled-simulator.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('hingeCanvas');
+            if (canvas) {
+                const simulator = new CrossHingeSimulator(canvas);
+            } else {
+                console.error('Canvas element not found');
+            }
+        });
+    </script>
 </body>
 </html>
