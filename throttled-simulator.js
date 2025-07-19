@@ -41,10 +41,9 @@ class CrossHingeSimulator {
         // Control parameters
         this.hingeX = 150; // Horizontal position of the hinge center
         this.hingeY = 75;  // Vertical position of the hinge center
-        this.lidAngle = 0; // Lid angle in degrees (driven by animation slider)
+        // todo: lidAngle is the angle between the coupleur link and the base link.
+        this.lidAngle = 0; // Lid angle in degrees (driven by animation slider) 
         this.lidDistance = 20; // Distance between base and lid when closed
-
-
 
         // Scale factor for rendering (pixels per mm)
         this.scale = 1.5;
@@ -319,7 +318,6 @@ class CrossHingeSimulator {
      */
     drawMechanism() {
 
-
         // ALWAYS draw the base elements
         this.drawBaseBox();
         this.drawFixedPivots();
@@ -482,16 +480,24 @@ class CrossHingeSimulator {
     drawLidBox() {
         if (!this.configurationValid) return;
 
-        // The lid is attached to the coupler link (B-C)
-        const angle = Math.atan2(this.pivotC.y - this.pivotB.y, this.pivotC.x - this.pivotB.x);
+        // The lid is attached to the coupler link (B-C), so it rotates with it.
+        const angle = Math.atan2(this.pivotB.y - this.pivotC.y, this.pivotB.x - this.pivotC.x);
+        // const angleDegrees = angle * (180 / Math.PI);
 
-        const pivotBPx = this.toPixel(this.pivotB);
+        // The lid's reference point for drawing is pivot B.
+        const pivotBPx = this.toPixel(this.pivotC);
 
         this.ctx.save();
-        this.ctx.translate(pivotBPx.x, pivotBPx.y);
-        this.ctx.rotate(angle);
 
-        // Draw the lid rectangle, aligned with the coupler link
+        // 1. Translate to pivot B's position
+        this.ctx.translate(pivotBPx.x, pivotBPx.y);
+
+        // 2. Rotate the canvas to match the coupler link's angle
+        this.ctx.rotate(-angle);
+
+        // 3. Draw the lid rectangle.
+        // The rectangle's top-left corner is at (0, 0) relative to the rotated pivot B.
+        // We draw it 'up' from the pivot, so we use a negative y-offset for the height.
         const lidWidthPx = this.lidWidth * this.scale;
         const lidHeightPx = this.lidHeight * this.scale;
 
@@ -610,13 +616,6 @@ class CrossHingeSimulator {
         this.ctx.lineWidth = width;
         this.ctx.stroke();
         this.ctx.closePath();
-    }
-    
-    /**
-     * Backward compatibility: Maps drawRectangle to drawBox for older code references
-     */
-    drawRectangle(x, y, width, height, color, id = '') {
-        this.drawBox(x, y, width, height, color, id);
     }
     
     /**
