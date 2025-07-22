@@ -52,11 +52,41 @@ class CrossHingeSimulator {
         this.offsetX = this.canvas.width / 2 - (this.baseWidth * this.scale) / 2;
         this.offsetY = this.canvas.height / 2;
 
+        // Design mode properties
+        this.isDesignMode = false;
+        this.mechanismCalculator = null;
+        this.lidPositionManager = null;
+        this.calculatedMechanism = null;
+
+        // Initialize design mode components
+        this.initDesignMode();
+
         // Initialize UI controls
         this.initControls();
 
         // Initial draw
         this.updateAndRender();
+    }
+
+    /**
+     * Initialize design mode components
+     */
+    initDesignMode() {
+        // Initialize the mechanism calculator and lid position manager
+        this.mechanismCalculator = new MechanismCalculator();
+        // In design mode, the lid manager works in its own coordinate space (1:1 with canvas pixels)
+        this.lidPositionManager = new LidPositionManager(this.canvas, this.mechanismCalculator, 1, { x: 0, y: 0 });
+        
+        // Set up callback for mechanism updates
+        this.lidPositionManager.setUpdateCallback((result) => {
+            this.calculatedMechanism = result;
+            this.updateMechanismStatus(result);
+        });
+
+        // Set up callback for redrawing
+        this.lidPositionManager.setRedrawCallback(() => {
+            this.render();
+        });
     }
 
     /**
@@ -618,6 +648,156 @@ class CrossHingeSimulator {
     }
     
     /**
+     * Enter design mode
+     */
+    enterDesignMode() {
+        this.isDesignMode = true;
+        
+        // Enable lid position manager event listeners
+        if (this.lidPositionManager) {
+            this.lidPositionManager.setupEventListeners();
+        }
+        
+        this.render();
+        console.log('Entered design mode');
+    }
+
+    /**
+     * Enter simulation mode
+     */
+    enterSimulationMode() {
+        this.isDesignMode = false;
+        
+        // Disable lid position manager event listeners
+        if (this.lidPositionManager) {
+            this.lidPositionManager.removeEventListeners();
+        }
+        
+        this.render();
+        console.log('Entered simulation mode');
+    }
+
+    /**
+     * Calculate mechanism from lid positions
+     */
+    calculateMechanism() {
+        if (!this.isDesignMode) return;
+        
+        try {
+            this.lidPositionManager.updateMechanism();
+            const result = this.calculatedMechanism;
+            
+            if (result && result.validation.isValid) {
+                // Apply calculated mechanism to simulation
+                this.applyCalculatedMechanism(result);
+                this.updateMechanismStatus(result, 'Mechanism calculated successfully!');
+            } else {
+                this.updateMechanismStatus(result, 'Invalid mechanism configuration');
+            }
+        } catch (error) {
+            console.error('Error calculating mechanism:', error);
+            this.updateMechanismStatus(null, `Error: ${error.message}`);
+        }
+    }
+
+    /**
+     * Reset lid positions to defaults
+     */
+    resetLidPositions() {
+        if (!this.isDesignMode || !this.lidPositionManager) return;
+        
+        // Reset to default positions (matching LidPositionManager defaults)
+        this.lidPositionManager.positions = [
+            {
+                id: 'closed',
+                name: 'Closed',
+                center: { x: 200, y: 300 },
+                rotation: 0,
+                color: 'rgba(100, 150, 255, 0.7)'
+            },
+            {
+                id: 'intermediate',
+                name: 'Intermediate', 
+                center: { x: 300, y: 200 },
+                rotation: 30,
+                color: 'rgba(255, 150, 100, 0.7)'
+            },
+            {
+                id: 'open',
+                name: 'Open',
+                center: { x: 400, y: 150 },
+                rotation: 60,
+                color: 'rgba(150, 255, 100, 0.7)'
+            }
+        ];
+        
+        // Reset coupler points to match smaller lid size
+        this.lidPositionManager.couplerPoints = {
+            A: { x: -40, y: 0 },
+            B: { x: 40, y: 0 }
+        };
+        
+        this.calculatedMechanism = null;
+        this.updateMechanismStatus(null, 'Positions reset. Adjust and calculate mechanism.');
+        this.render();
+    }
+
+    /**
+     * Apply calculated mechanism parameters to simulation
+     */
+    applyCalculatedMechanism(result) {
+        if (!result || !result.pivotPoints) return;
+        
+        // Update pivot positions
+        this.pivotA = { x: result.pivotPoints.left.x, y: result.pivotPoints.left.y };
+        this.pivotD = { x: result.pivotPoints.right.x, y: result.pivotPoints.right.y };
+        
+        // Update dimensions based on calculated mechanism
+        if (result.linkLengths) {
+            this.baseWidth = result.linkLengths.groundLink;
+            this.lidWidth = result.linkLengths.couplerLink;
+            this.barLength = (result.linkLengths.inputLink + result.linkLengths.outputLink) / 2;
+        }
+        
+        // Update geometry
+        this.updateMechanismGeometry();
+    }
+
+    /**
+     * Update mechanism status display
+     */
+    updateMechanismStatus(result, message = null) {
+        const statusElement = document.getElementById('mechanismStatus');
+        if (!statusElement) return;
+        
+        if (message) {
+            statusElement.textContent = message;
+            return;
+        }
+        
+        if (!result) {
+            statusElement.textContent = 'Position your lids and click Calculate';
+            return;
+        }
+        
+        if (result.validation.isValid) {
+            statusElement.innerHTML = `
+                <strong>✅ Valid Mechanism</strong><br>
+                Ground Link: ${result.linkLengths.groundLink.toFixed(1)}mm<br>
+                Coupler Link: ${result.linkLengths.couplerLink.toFixed(1)}mm<br>
+                Input Link: ${result.linkLengths.inputLink.toFixed(1)}mm<br>
+                Output Link: ${result.linkLengths.outputLink.toFixed(1)}mm
+            `;
+        } else {
+            statusElement.innerHTML = `
+                <strong>❌ Invalid Mechanism</strong><br>
+                ${result.validation.errors.join('<br>')}
+                ${result.validation.warnings.join('<br>')}
+            `;
+        }
+    }
+
+    /**
      * Render the mechanism on the canvas
      */
     render() {
@@ -626,15 +806,104 @@ class CrossHingeSimulator {
 
         this.ctx.save();
 
-        // Scale and translate to match our mm-based coordinate system
-        this.ctx.scale(this.scale, this.scale);
+        if (this.isDesignMode) {
+            // In design mode, render lid positions and design interface
+            if (this.lidPositionManager) {
+                this.lidPositionManager.render(this.ctx);
+            }
+            
+            // Draw calculated mechanism if available
+            if (this.calculatedMechanism && this.calculatedMechanism.validation.isValid) {
+                this.drawCalculatedMechanism();
+            }
+        } else {
+            // In simulation mode, render the normal mechanism
+            // Scale and translate to match our mm-based coordinate system
+            this.ctx.scale(this.scale, this.scale);
 
-        // Draw debug visualization first so it's behind everything else
-        this.drawDebugCircles();
+            // Draw debug visualization first so it's behind everything else
+            this.drawDebugCircles();
 
-        // Draw the mechanism components
-        this.drawMechanism();
+            // Draw the mechanism components
+            this.drawMechanism();
+        }
 
+        this.ctx.restore();
+    }
+
+    /**
+     * Draw the calculated mechanism in design mode
+     */
+    drawCalculatedMechanism() {
+        if (!this.calculatedMechanism || !this.calculatedMechanism.pivotPoints) return;
+        
+        const result = this.calculatedMechanism;
+        const scale = this.lidPositionManager.scale;
+        const offsetX = this.lidPositionManager.offsetX;
+        const offsetY = this.lidPositionManager.offsetY;
+        
+        this.ctx.save();
+        this.ctx.translate(offsetX, offsetY);
+        this.ctx.scale(scale, scale);
+        
+        // Draw pivot points
+        const leftPivot = result.pivotPoints.left;
+        const rightPivot = result.pivotPoints.right;
+        
+        // Draw ground link
+        this.ctx.beginPath();
+        this.ctx.moveTo(leftPivot.x, leftPivot.y);
+        this.ctx.lineTo(rightPivot.x, rightPivot.y);
+        this.ctx.strokeStyle = 'black';
+        this.ctx.lineWidth = 4;
+        this.ctx.stroke();
+        
+        // Draw pivot points
+        this.ctx.beginPath();
+        this.ctx.arc(leftPivot.x, leftPivot.y, 8, 0, Math.PI * 2);
+        this.ctx.fillStyle = 'red';
+        this.ctx.fill();
+        this.ctx.strokeStyle = 'darkred';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        
+        this.ctx.beginPath();
+        this.ctx.arc(rightPivot.x, rightPivot.y, 8, 0, Math.PI * 2);
+        this.ctx.fillStyle = 'red';
+        this.ctx.fill();
+        this.ctx.strokeStyle = 'darkred';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        
+        // Draw labels
+        this.ctx.fillStyle = 'black';
+        this.ctx.font = '14px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('A', leftPivot.x, leftPivot.y - 20);
+        this.ctx.fillText('D', rightPivot.x, rightPivot.y - 20);
+        
+        // Draw connecting links to first position
+        if (result.transformedPoints) {
+            const A1 = result.transformedPoints.A[0];
+            const B1 = result.transformedPoints.B[0];
+            
+            // Input link (A to A1)
+            this.ctx.beginPath();
+            this.ctx.moveTo(leftPivot.x, leftPivot.y);
+            this.ctx.lineTo(A1.x, A1.y);
+            this.ctx.strokeStyle = 'blue';
+            this.ctx.lineWidth = 3;
+            this.ctx.stroke();
+            
+            // Output link (D to B1)
+            this.ctx.beginPath();
+            this.ctx.moveTo(rightPivot.x, rightPivot.y);
+            this.ctx.lineTo(B1.x, B1.y);
+            this.ctx.strokeStyle = 'blue';
+            this.ctx.lineWidth = 3;
+            this.ctx.stroke();
+        }
+        
         this.ctx.restore();
     }
 }
