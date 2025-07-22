@@ -482,7 +482,6 @@ class CrossHingeSimulator {
 
         // The lid is attached to the coupler link (B-C), so it rotates with it.
         const angle = Math.atan2(this.pivotB.y - this.pivotC.y, this.pivotB.x - this.pivotC.x);
-        // const angleDegrees = angle * (180 / Math.PI);
 
         // The lid's reference point for drawing is pivot B.
         const pivotBPx = this.toPixel(this.pivotC);
