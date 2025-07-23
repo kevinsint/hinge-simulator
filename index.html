@@ -172,6 +172,11 @@
                 <button id="resetPositions">Reset Positions</button>
             </div>
             <div id="mechanismStatus">Position your lids and click Calculate</div>
+            <div id="animationControl" class="slider-group" style="display: none;">
+                <label for="animationSlider">Animate Mechanism:</label>
+                <input type="range" id="animationSlider" min="0" max="100" value="0">
+                <span id="animationSliderValue">0%</span>
+            </div>
         </div>
 
     </div>
@@ -209,16 +214,7 @@
                 
                 designModeSelect.addEventListener('change', (e) => {
                     const isDesignMode = e.target.value === 'design';
-                    
-                    if (isDesignMode) {
-                        simulationControls.style.display = 'none';
-                        designControls.style.display = 'block';
-                        simulator.enterDesignMode();
-                    } else {
-                        simulationControls.style.display = 'block';
-                        designControls.style.display = 'none';
-                        simulator.enterSimulationMode();
-                    }
+                    simulator.toggleMode(isDesignMode);
                 });
                 
                 // Set up design mode buttons

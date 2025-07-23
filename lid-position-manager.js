@@ -217,7 +217,15 @@ class LidPositionManager {
     updateMechanism() {
         if (this.onMechanismUpdate) {
             console.log('Updating mechanism calculation...');
-            const result = this.calculator.calculate(this.getPositions(), this.getCouplerPoints());
+            const positions = this.getPositions();
+            const couplerPoints = this.getCouplerPoints();
+
+            // Set the state on the calculator before calculating
+            this.calculator.setLidPositions(positions);
+            this.calculator.setCouplerPoints(couplerPoints.A, couplerPoints.B);
+
+            // Now, call the correct calculation method
+            const result = this.calculator.calculateMechanism();
             this.onMechanismUpdate(result);
         }
     }
@@ -300,6 +308,18 @@ class LidPositionManager {
 
     getPositions() {
         return JSON.parse(JSON.stringify(this.positions));
+    }
+
+    resetPositions() {
+        this.positions = [
+            { id: 'closed', name: 'Closed', center: { x: 200, y: 300 }, rotation: 0, color: 'rgba(100, 150, 255, 0.7)' },
+            { id: 'intermediate', name: 'Intermediate', center: { x: 300, y: 200 }, rotation: 30, color: 'rgba(255, 150, 100, 0.7)' },
+            { id: 'open', name: 'Open', center: { x: 400, y: 150 }, rotation: 60, color: 'rgba(150, 255, 100, 0.7)' }
+        ];
+        if (this.redrawCallback) {
+            this.redrawCallback();
+        }
+        this.updateMechanism();
     }
 
     getCouplerPoints() {

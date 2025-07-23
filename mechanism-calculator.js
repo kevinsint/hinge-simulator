@@ -416,6 +416,99 @@ class MechanismCalculator {
         this.isValid = false;
         this.couplerLength = 0;
     }
+
+    /**
+     * Calculate the state of the mechanism for a given input link angle.
+     * This is used for animating the calculated mechanism.
+     * @param {number} angleRad - The angle of the input link in radians.
+     * @returns {Object|null} An object with the positions of all points, or null if the position is unreachable.
+     */
+    getMechanismStateAtAngle(angleRad) {
+        if (!this.isValid || !this.pivotPoints.left || !this.pivotPoints.right) {
+            return null; // Cannot animate an invalid or incomplete mechanism
+        }
+
+        const linkLengths = this.calculateLinkLengths(this.pivotPoints, this.transformCouplerToAllPositions());
+        const groundLink = linkLengths.groundLink;
+        const inputLink = linkLengths.inputLink;
+        const couplerLink = linkLengths.couplerLink;
+        const outputLink = linkLengths.outputLink;
+
+        // 1. Calculate the position of coupler point A based on the input angle
+        const pivotA = this.pivotPoints.left;
+        const couplerA = {
+            x: pivotA.x + inputLink * Math.cos(angleRad),
+            y: pivotA.y + inputLink * Math.sin(angleRad)
+        };
+
+        // 2. Find the position of coupler point B by circle-circle intersection
+        const pivotB = this.pivotPoints.right;
+        const distSq = (pivotB.x - couplerA.x) ** 2 + (pivotB.y - couplerA.y) ** 2;
+        const dist = Math.sqrt(distSq);
+
+        // Check if the position is reachable
+        if (dist > couplerLink + outputLink || dist < Math.abs(couplerLink - outputLink)) {
+            return null; // Position is not reachable
+        }
+
+        const a = (couplerLink ** 2 - outputLink ** 2 + distSq) / (2 * dist);
+        const h = Math.sqrt(Math.max(0, couplerLink ** 2 - a ** 2));
+        
+        const midX = couplerA.x + a * (pivotB.x - couplerA.x) / dist;
+        const midY = couplerA.y + a * (pivotB.y - couplerA.y) / dist;
+
+        // There are two possible solutions for the intersection. We need to pick the one
+        // that matches the original configuration (e.g., elbow up or down).
+        // For now, we'll just pick one. This might need refinement if the mechanism can flip.
+        const couplerB = {
+            x: midX + h * (pivotB.y - couplerA.y) / dist,
+            y: midY - h * (pivotB.x - couplerA.x) / dist
+        };
+
+        // 3. Determine the lid's position (center and rotation) from the new coupler points
+        const originalCoupler = this.couplerPoints;
+        const originalLidCenter = this.positions[0].center;
+        
+        // Vector from original coupler A to B
+        const oVecAB = { x: originalCoupler.B.x - originalCoupler.A.x, y: originalCoupler.B.y - originalCoupler.A.y };
+        // Vector from new coupler A to B
+        const nVecAB = { x: couplerB.x - couplerA.x, y: couplerB.y - couplerA.y };
+
+        // Calculate rotation difference
+        const originalAngle = Math.atan2(oVecAB.y, oVecAB.x);
+        const newAngle = Math.atan2(nVecAB.y, nVecAB.x);
+        const rotationDiff = newAngle - originalAngle;
+
+        // Vector from original coupler A to original lid center
+        const oVecACenter = { x: originalLidCenter.x - originalCoupler.A.x, y: originalLidCenter.y - originalCoupler.A.y };
+
+        // Rotate the A-to-Center vector
+        const nVecACenter = {
+            x: oVecACenter.x * Math.cos(rotationDiff) - oVecACenter.y * Math.sin(rotationDiff),
+            y: oVecACenter.x * Math.sin(rotationDiff) + oVecACenter.y * Math.cos(rotationDiff)
+        };
+
+        // Calculate new lid center
+        const lidCenter = {
+            x: couplerA.x + nVecACenter.x,
+            y: couplerA.y + nVecACenter.y
+        };
+
+        const lidRotation = this.positions[0].rotation + (rotationDiff * 180 / Math.PI);
+
+        return {
+            couplerA,
+            couplerB,
+            pivotA,
+            pivotB,
+            lid: {
+                center: lidCenter,
+                rotation: lidRotation,
+                width: this.positions[0].width,
+                height: this.positions[0].height
+            }
+        };
+    }
 }
 
 // Export for use in other modules
