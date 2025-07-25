@@ -107,55 +107,13 @@
     <h1>Cross Hinge Simulator</h1>
     
     <div class="controls">
-        <div class="control-section">
-            <h3>Mode Selection</h3>
-            <div class="slider-group">
-                <label for="designMode">Design Mode:</label>
-                <select id="designMode">
-                    <option value="simulation">Simulation Mode</option>
-                    <option value="design">Mechanism Design Mode</option>
-                </select>
-            </div>
-        </div>
-        
-        <div class="control-section" id="simulationControls">
-            <h3>Box Dimensions</h3>
-            <div class="slider-group">
-                <label for="boxWidth">Box Width (mm):</label>
-                <input type="range" id="boxWidth" min="100" max="500" value="300">
-                <span id="boxWidthValue">300</span>
-            </div>
-            <div class="slider-group">
-                <label for="baseHeight">Base Height (mm):</label>
-                <input type="range" id="baseHeight" min="50" max="200" value="100">
-                <span id="baseHeightValue">100</span>
-            </div>
-            <div class="slider-group">
-                <label for="lidHeight">Lid Height (mm):</label>
-                <input type="range" id="lidHeight" min="30" max="150" value="80">
-                <span id="lidHeightValue">80</span>
-            </div>
-        </div>
+
         
         <div class="control-section">
-            <h3>Hinge Configuration</h3>
-            <div class="slider-group">
-                <label for="hingeX">Hinge X Position (mm):</label>
-                <input type="range" id="hingeX" min="50" max="250" value="150">
-                <span id="hingeXValue">150</span>
-            </div>
-            <div class="slider-group">
-                <label for="hingeY">Hinge Y Position (mm):</label>
-                <input type="range" id="hingeY" min="25" max="150" value="75">
-                <span id="hingeYValue">75</span>
-            </div>
-            <div class="slider-group">
-                <label for="barLength">Bar Length (mm):</label>
-                <input type="range" id="barLength" min="30" max="150" value="80">
-                <span id="barLengthValue">80</span>
-            </div>
+            <h3>Controls</h3>
+            <button id="resetPositions">Reset Design</button>
         </div>
-        
+
         <div class="control-section">
             <h3>Animation</h3>
             <div class="slider-group">
@@ -196,6 +154,6 @@
     </div>
 
     <!-- Import main UI module as ES module -->
-    <script type="module" src="designer.js"></script>
+    <script type="module" src="designer.js" defer></script>
 </body>
 </html>
