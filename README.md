@@ -1,6 +1,8 @@
 # Cross Hinge Simulator
 
-A web-based simulator for designing and testing cross (X-shaped) hinges for boxes. This tool helps you design a working hinge system that allows proper lid movement.
+A web-based simulator for designing and testing cross (X-shaped) hinges for boxes. 
+
+This tool helps you design a working hinge system that allows proper lid movement.
 
 ## Features
 
@@ -10,7 +12,6 @@ A web-based simulator for designing and testing cross (X-shaped) hinges for boxe
 - Automatic calculation of optimal hinge parameters (later)
 - Visual indicators for optimal hinge position and bar length (later)
 - Detailed guidance and warnings about potential issues
-
 
 ## Usage
 
@@ -54,21 +55,24 @@ The simulator uses a simple object-oriented approach with the `CrossHingeSimulat
 
 ## Mechanism
 
+### Four-Bar Linkages
+https://dynref.engr.illinois.edu/aml.html
+
 Antiparallelogram (crossing) four-bar mechanism:
 
 - Four rigid links: one of these is fixed (ground), the other three move.
 - Four pin joints connecting the links.
-- It typically has a single degree of freedom, which means the motion of one link determines the rest.
-- Links cross; input and output move in opposing senses, producing an “X” configuration
-
-## Terminology
+- It has a single degree of freedom, which means the motion of the input link determines the rest.
+- Links cross; input and output move in opposing senses, producing an X configuration.
+- Links BC (coupler) and AD (ground) never cross each other.
+- No links need to be of equal length.
 
 ### Links (Rigid Bodies)
 
-1. **Ground Link (L₄)**: The fixed link connecting pivots A and D, representing the base of the box.
+1. **Ground Link (L₄)**: The fixed link connecting pivots A and D, connected to the base of the box.
 2. **Input Link (L₁)**: The first crossing bar connecting pivots A and B.
 3. **Output Link (L₂)**: The second crossing bar connecting pivots D and C.
-4. **Coupler Link (L₃)**: The link connecting pivots B and C, representing the lid of the box.
+4. **Floating Link (L₃)**: The link connecting pivots B and C, connected to the lid of the box.
 
 ### Pivots (Pin Joints)
 
@@ -81,37 +85,42 @@ Antiparallelogram (crossing) four-bar mechanism:
 
 - **Intersection Point (X)**: The point where the input link (AB) and output link (DC) cross each other. This point moves during operation but is not a physical pivot.
 
-### Kinematics Properties
+## Mechanism design
 
-- The mechanism has a single degree of freedom.
-- Links AB and DC always cross, forming the characteristic "X" configuration.
-- All links maintain constant length throughout the motion.
-- Input and output links rotate in opposing directions.
-- Lid is fixed to output link.
-- Base is fixed to ground link.
-- Links BC (coupler) and AD (ground) never cross each other.
+The user will place three virtual lids in the simulator representing the following positions:
+
+- Closed lid (fully closed)
+- Intermediate lid (mid between first part of the movement and second part of the movement)
+- Open lid (fully open)
+
+### Overall mechanism design
+
+- Once defined, the length of the links cannot be changed.
+- The lid is attached to the coupler link.
+- The base is attached to the ground link.
+- The lid can rotate between 0 and 180 degrees.
+- The lid can be placed to a distance of 0 to 150% of the box width in every direction.
+
+### Lid design
+
+- Each lid is drag and dropable and have an anchor point to rotate it. 
+- Each lid is named accordingly: closed, intermediate and open.
+- The user can reposition the floating pivot B and C points inside the closed lid.
+- Lid can rotate between 0 and 180 degrees.
+- Lid can be placed to a distance of 0 to 150% of the box width in every direction.
 
 
-Mechanism design:
-Design Process in SolidWorks:
+### Base design
 
-Set up the path positions:
+- The base position is always fixed.
+- The user can reposition the ground pivot A and D points inside the box base.
 
-The user will place three virtual lid in the simulator in three different positions:
+### How to calculate the mechanism
 
-- Closed position
-- Intermediate position
-- Open position
+- Recalculate the mechanism every time the user moves a point or change a slider value or move the lids.
 
-Lid design:
-- Each virtual lid will have a center handle to move id and an anchor point to rotate it. 
-- Each will be named accordingly: closed, intermediate, and open.
 
-Once lid placed, the user will set 2 points on the closed lid that will represent the coupler link. The user will be able to move the points to adjust the mechanism.
-
-The simulator will calculate the mechanism automatically.
-How to calculate the mechanism:
-
+Not sure it works this way for crossed mechanisms, but work for four-bar mechanisms.
 - Make all lines equal length (this represents link #3)
 - Identify the sides:
   - Label one end as side A (positions A1, A2, A3)
@@ -129,10 +138,3 @@ How to calculate the mechanism:
   - Create links #2 and #4 from pivot points to the moving part
 - The mechanism will now follow the desired path through all three positions
 - All other parameters are calculated automatically.
-
-## License
-
-This project is open source and available for use in your projects. Feel free to modify and adapt it as needed.
-Use MIT license.
-
-Reference: https://mm-nitk.vlabs.ac.in/exp/position-analysis-grashof/simulation.html

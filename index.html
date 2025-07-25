@@ -168,10 +168,9 @@
         <div class="control-section" id="designControls" style="display: none;">
             <h3>Mechanism Design</h3>
             <div class="slider-group">
-                <button id="calculateMechanism">Calculate Mechanism</button>
-                <button id="resetPositions">Reset Positions</button>
+                <button id="resetPositions">Reset Design</button>
+                <div class="status-indicator" id="statusIndicator"></div>
             </div>
-            <div id="mechanismStatus">Position your lids and click Calculate</div>
             <div id="animationControl" class="slider-group" style="display: none;">
                 <label for="animationSlider">Animate Mechanism:</label>
                 <input type="range" id="animationSlider" min="0" max="100" value="0">
@@ -181,7 +180,7 @@
 
     </div>
 
-    <canvas id="hingeCanvas" width="900" height="600"></canvas>
+    <canvas id="hingeCanvas" width="1125" height="750"></canvas>
 
     <div class="info-box">
         <h3>Design Analysis</h3>
@@ -196,40 +195,7 @@
         </ul>
     </div>
 
-    <!-- Import all modules -->
-    <script src="mechanism-calculator.js"></script>
-    <script src="lid-position-manager.js"></script>
-    <script src="simulator.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const canvas = document.getElementById('hingeCanvas');
-            if (canvas) {
-                // Initialize the integrated simulator
-                const simulator = new CrossHingeSimulator(canvas);
-                
-                // Set up mode switching
-                const designModeSelect = document.getElementById('designMode');
-                const simulationControls = document.getElementById('simulationControls');
-                const designControls = document.getElementById('designControls');
-                
-                designModeSelect.addEventListener('change', (e) => {
-                    const isDesignMode = e.target.value === 'design';
-                    simulator.toggleMode(isDesignMode);
-                });
-                
-                // Set up design mode buttons
-                document.getElementById('calculateMechanism').addEventListener('click', () => {
-                    simulator.calculateMechanism();
-                });
-                
-                document.getElementById('resetPositions').addEventListener('click', () => {
-                    simulator.resetLidPositions();
-                });
-                
-            } else {
-                console.error('Canvas element not found');
-            }
-        });
-    </script>
+    <!-- Import main UI module as ES module -->
+    <script type="module" src="designer.js"></script>
 </body>
 </html>
