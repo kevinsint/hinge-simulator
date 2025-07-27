@@ -100,6 +100,8 @@ The user will place three virtual lids in the simulator representing the followi
 - The base is attached to the ground link.
 - The lid can rotate between 0 and 180 degrees.
 - The lid can be placed to a distance of 0 to 150% of the box width in every direction.
+- Link A-B must not cross over pivot D
+- Link C-D must not cross over pivot A
 
 ### Lid design
 

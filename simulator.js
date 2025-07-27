@@ -9,6 +9,16 @@ export class FourBarLinkageCalculator {
         return Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
     }
 
+    /**
+     * Determines the orientation of the ordered triplet (p, q, r).
+     * @returns {number} 0 if collinear, 1 if clockwise, 2 if counterclockwise.
+     */
+    static orientation(p, q, r) {
+        const val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+        if (Math.abs(val) < 1e-10) return 0; // Collinear
+        return (val > 0) ? 1 : 2; // Clockwise or Counterclockwise
+    }
+
     // Helper to find the intersection points of two circles.
     /**
      * Checks if a target position for the lid is reachable by the calculated four-bar linkage.
