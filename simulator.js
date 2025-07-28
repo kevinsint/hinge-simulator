@@ -96,6 +96,7 @@ export class FourBarLinkageCalculator {
         return false; // Doesn't fall in any of the above cases
     }
 
+
     static circleCircleIntersection(p1, r1, p2, r2) {
         const d = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
 

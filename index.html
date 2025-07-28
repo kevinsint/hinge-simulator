@@ -121,6 +121,7 @@
                 <input type="range" id="lidAngle" min="0" max="180" value="0">
                 <span id="lidAngleValue">0</span>
             </div>
+            <div id="angleLimitsStatus" style="margin-top:8px; color:#555; font-size:14px;"></div>
         </div>
         
         <div class="control-section" id="designControls" style="display: none;">
@@ -130,9 +131,7 @@
                 <div class="status-indicator" id="statusIndicator"></div>
             </div>
             <div id="animationControl" class="slider-group" style="display: none;">
-                <label for="animationSlider">Animate Mechanism:</label>
-                <input type="range" id="animationSlider" min="0" max="100" value="0">
-                <span id="animationSliderValue">0%</span>
+                <!-- Animation slider hidden, use lidAngle instead -->
             </div>
         </div>
 
@@ -155,5 +154,10 @@
 
     <!-- Import main UI module as ES module -->
     <script type="module" src="designer.js" defer></script>
+    <!-- Deployment version info -->
+    <footer style="text-align:center; margin-top:2em; color:#888; font-size:14px;">
+        Cross Hinge Simulator – v2025-07-28-0857
+    </footer>
+    <meta name="deployment-version" content="v2025-07-28-0857">
 </body>
 </html>
