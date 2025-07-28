@@ -87,56 +87,26 @@ Antiparallelogram (crossing) four-bar mechanism:
 
 ## Mechanism design
 
-The user will place three virtual lids in the simulator representing the following positions:
-
-- Closed lid (fully closed)
-- Intermediate lid (mid between first part of the movement and second part of the movement)
-- Open lid (fully open)
-
-### Overall mechanism design
-
+- The user define the box width, the base height and the lid height.
 - Once defined, the length of the links cannot be changed.
 - The lid is attached to the coupler link.
 - The base is attached to the ground link.
-- The lid can rotate between 0 and 180 degrees.
-- The lid can be placed to a distance of 0 to 150% of the box width in every direction.
-- Link A-B must not cross over pivot D
-- Link C-D must not cross over pivot A
+- Link A-B must not cross over pivot D.
+- Link C-D must not cross over pivot A.
 
 ### Lid design
 
-- Each lid is drag and dropable and have an anchor point to rotate it. 
-- Each lid is named accordingly: closed, intermediate and open.
-- The user can reposition the floating pivot B and C points inside the closed lid.
-- Lid can rotate between 0 and 180 degrees.
-- Lid can be placed to a distance of 0 to 150% of the box width in every direction.
-
+- The lid must not cross over the base.
+- The lid width is the same as the base width, the global box width.
+- The lid height can be set by the user.
+- The user can reposition the floating pivot B and C points inside the lid.
+- The coupler pivot B and C must not cross over the base.
+- The coupler pivot B and C cannot be placed outside the lid.
 
 ### Base design
 
 - The base position is always fixed.
 - The user can reposition the ground pivot A and D points inside the box base.
+- The user can adjust the box bas height.
+- The base width is the same as the lid width: the global box width.
 
-### How to calculate the mechanism
-
-- Recalculate the mechanism every time the user moves a point or change a slider value or move the lids.
-
-
-Not sure it works this way for crossed mechanisms, but work for four-bar mechanisms.
-- Make all lines equal length (this represents link #3)
-- Identify the sides:
-  - Label one end as side A (positions A1, A2, A3)
-  - Label other end as side B (positions B1, B2, B3)
-- Connect the positions:
-  - Draw lines connecting A1 to A2, and A2 to A3
-  - Draw lines connecting B1 to B2, and B2 to B3
-- Find pivot points:
-  - Find midpoint of A1-A2 line, draw perpendicular line from it
-  - Find midpoint of A2-A3 line, draw perpendicular line from it
-  - Repeat for B side (B1-B2 and B2-B3)
-  - Find convergence points of perpendicular lines - these become your base pivot points
-- Create the mechanism:
-  - Connect convergence points to form the base (link #1)
-  - Create links #2 and #4 from pivot points to the moving part
-- The mechanism will now follow the desired path through all three positions
-- All other parameters are calculated automatically.
