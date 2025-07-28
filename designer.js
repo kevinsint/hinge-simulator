@@ -1,6 +1,6 @@
 import { FourBarLinkageCalculator } from './simulator.js';
 
-class DesignerUI {
+export class DesignerUI {
     constructor(canvas) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
@@ -135,58 +135,95 @@ class DesignerUI {
     }
 
     calculateAnimatedStateForAngle(angleOffset) {
-        if (this.initialInputAngle === null) {
-            console.log('Animation failed: initialInputAngle is null');
-            return null;
-        }
-
-        console.log('Current mechanism pivots:', this.mechanism.pivots);
-        console.log('Initial input angle:', this.initialInputAngle);
-
-        const { A, B, C, D } = this.mechanism.pivots;
-        const l_ab = FourBarLinkageCalculator.distance(A, B);
-        const l_cd = FourBarLinkageCalculator.distance(C, D);
-        const l_bc = FourBarLinkageCalculator.distance(B, C);
-        
-        console.log('Link lengths:', { l_ab, l_cd, l_bc });
-
-        const newAngle = this.initialInputAngle + angleOffset;
-        const newB = { x: A.x + l_ab * Math.cos(newAngle), y: A.y + l_ab * Math.sin(newAngle) };
-        const intersections = FourBarLinkageCalculator.circleCircleIntersection(newB, l_bc, D, l_cd);
-        if (!intersections || intersections.length === 0) return null;
-        const validSolutions = intersections.filter(p => {
-            // A valid crossed linkage requires the coupler (BC) and ground (AD) links to intersect.
-            return FourBarLinkageCalculator.segmentsIntersect(newB, p, A, D);
-        });
-
-        if (validSolutions.length === 0) return null;
-
-        let chosenSolution;
-        if (validSolutions.length === 1) {
-            chosenSolution = validSolutions[0];
-        } else {
-            // To ensure continuity, choose the solution closest to the last known valid position of C.
-            if (this.lastValidC) {
-                validSolutions.sort((a, b) => {
-                    const distA = FourBarLinkageCalculator.distance(a, this.lastValidC);
-                    const distB = FourBarLinkageCalculator.distance(b, this.lastValidC);
-                    return distA - distB;
-                });
-                chosenSolution = validSolutions[0];
-            } else {
-                // Fallback for the very first frame if needed. This case should be rare.
-                const initialOrientation = FourBarLinkageCalculator.orientation(D, C, B);
-                chosenSolution = validSolutions.find(p => FourBarLinkageCalculator.orientation(D, p, newB) === initialOrientation) || validSolutions[0];
-            }
-        }
-
-        if (chosenSolution) {
-            this.lastValidC = chosenSolution;
-            return { A, B: newB, C: chosenSolution, D };
-        }
-
+    console.log(`[calculateAnimatedStateForAngle] Testing angle offset: ${angleOffset.toFixed(4)}`);
+    
+    if (this.initialInputAngle === null) {
+        console.log('[calculateAnimatedStateForAngle] Animation failed: initialInputAngle is null');
         return null;
     }
+
+    if (!this.mechanism || !this.mechanism.pivots) {
+        console.log('[calculateAnimatedStateForAngle] Error: mechanism or pivots is null/undefined');
+        return null;
+    }
+
+    const { A, B, C, D } = this.mechanism.pivots;
+    
+    // Validate pivot points
+    if (!A || !B || !C || !D) {
+        console.log('[calculateAnimatedStateForAngle] Error: One or more pivots missing', { A, B, C, D });
+        return null;
+    }
+    
+    const l_ab = FourBarLinkageCalculator.distance(A, B);
+    const l_cd = FourBarLinkageCalculator.distance(C, D);
+    const l_bc = FourBarLinkageCalculator.distance(B, C);
+    
+    // Check for degenerate linkage (zero or very small lengths)
+    if (l_ab < 1 || l_cd < 1 || l_bc < 1) {
+        console.log('[calculateAnimatedStateForAngle] Error: Degenerate linkage detected', { l_ab, l_cd, l_bc });
+        return null;
+    }
+
+    const newAngle = this.initialInputAngle + angleOffset;
+    console.log(`[calculateAnimatedStateForAngle] New angle: ${newAngle.toFixed(4)} (${(newAngle * 180 / Math.PI).toFixed(1)}°)`);
+    
+    const newB = { x: A.x + l_ab * Math.cos(newAngle), y: A.y + l_ab * Math.sin(newAngle) };
+    console.log(`[calculateAnimatedStateForAngle] New B position: (${newB.x.toFixed(1)}, ${newB.y.toFixed(1)})`);
+    
+    const intersections = FourBarLinkageCalculator.circleCircleIntersection(newB, l_bc, D, l_cd);
+    
+    if (!intersections || intersections.length === 0) {
+        console.log('[calculateAnimatedStateForAngle] No intersections found between circles');
+        return null;
+    }
+    
+    console.log(`[calculateAnimatedStateForAngle] Found ${intersections.length} intersection(s):`, 
+                intersections.map(p => `(${p.x.toFixed(1)}, ${p.y.toFixed(1)})`))
+    
+    // Accept all circle-circle intersections as valid solutions
+    // This allows both crossed and non-crossed linkage configurations
+    const validSolutions = intersections;
+    console.log(`[calculateAnimatedStateForAngle] All ${validSolutions.length} intersections considered valid (allowing non-crossed linkages)`);
+
+    if (validSolutions.length === 0) {
+        console.log('[calculateAnimatedStateForAngle] No valid crossed configurations found');
+        return null;
+    }
+    
+    console.log(`[calculateAnimatedStateForAngle] Found ${validSolutions.length} valid solution(s)`);
+
+    let chosenSolution;
+    if (validSolutions.length === 1) {
+        chosenSolution = validSolutions[0];
+        console.log('[calculateAnimatedStateForAngle] Using the only valid solution');
+    } else {
+        // To ensure continuity, choose the solution closest to the last known valid position of C.
+        if (this.lastValidC) {
+            validSolutions.sort((a, b) => {
+                const distA = FourBarLinkageCalculator.distance(a, this.lastValidC);
+                const distB = FourBarLinkageCalculator.distance(b, this.lastValidC);
+                return distA - distB;
+            });
+            chosenSolution = validSolutions[0];
+            console.log('[calculateAnimatedStateForAngle] Multiple solutions, chose closest to last valid');
+        } else {
+            // Fallback for the very first frame if needed. This case should be rare.
+            const initialOrientation = FourBarLinkageCalculator.orientation(D, C, B);
+            chosenSolution = validSolutions.find(p => FourBarLinkageCalculator.orientation(D, p, newB) === initialOrientation) || validSolutions[0];
+            console.log('[calculateAnimatedStateForAngle] Multiple solutions, chose based on orientation');
+        }
+    }
+
+    if (chosenSolution) {
+        console.log(`[calculateAnimatedStateForAngle] Final solution C: (${chosenSolution.x.toFixed(1)}, ${chosenSolution.y.toFixed(1)})`);
+        this.lastValidC = chosenSolution;
+        return { A, B: newB, C: chosenSolution, D };
+    }
+
+    console.log('[calculateAnimatedStateForAngle] Failed to find solution');
+    return null;
+}
 
     drawPivot(p, color, label) {
         // Safety check to prevent errors with undefined points
@@ -266,30 +303,52 @@ class DesignerUI {
     }
 
     calculateAngleLimits() {
+        console.log('[calculateAngleLimits] Starting angle limit calculation');
+        console.log('[calculateAngleLimits] Current mechanism:', this.mechanism);
+        console.log('[calculateAngleLimits] Initial input angle:', this.initialInputAngle);
+        
         // Helper function to find the limit in one direction using binary search for high precision.
         const findLimit = (direction) => {
+            console.log(`[findLimit] Starting search in direction: ${direction}`);
             let low = 0;
             let high = Math.PI * 2 * direction;
             let best = 0;
+            let validFound = false;
 
             // Perform binary search for a fixed number of iterations to find the limit with high precision.
             for (let i = 0; i < 100; i++) {
                 const mid = low + (high - low) / 2;
-                if (mid === best) break; // Converged
+                if (mid === best) {
+                    console.log(`[findLimit] Converged at iteration ${i}, best: ${best}`);
+                    break; // Converged
+                }
 
-                if (this.calculateAnimatedStateForAngle(mid)) {
+                const result = this.calculateAnimatedStateForAngle(mid);
+                console.log(`[findLimit] Iteration ${i}, angle: ${mid.toFixed(4)}, valid: ${!!result}`);
+                
+                if (result) {
+                    validFound = true;
                     best = mid; // This angle is valid, try for a larger one (in magnitude)
                     low = mid;
                 } else {
                     high = mid; // This angle is invalid, the limit is in the lower half
                 }
+                
+                // Break early if we've narrowed down enough
+                if (Math.abs(high - low) < 0.0001) {
+                    console.log(`[findLimit] Precision threshold reached at iteration ${i}`);
+                    break;
+                }
             }
+            
+            console.log(`[findLimit] Final result for direction ${direction}: ${best.toFixed(4)}, valid found: ${validFound}`);
             return best;
         };
 
         const maxAngle = findLimit(1);
         const minAngle = findLimit(-1);
-
+        
+        console.log(`[calculateAngleLimits] Results: min=${minAngle.toFixed(4)}, max=${maxAngle.toFixed(4)}`);
         this.angleLimits = { min: minAngle, max: maxAngle };
     }
 

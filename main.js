@@ -3,9 +3,6 @@ import { CrossHingeSimulator } from './simulation_ui.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('hingeCanvas');
-    const designModeSelect = document.getElementById('designMode');
-    const simulationControls = document.getElementById('simulationControls');
-    const designControls = document.getElementById('designControls');
     const lidAngleSlider = document.getElementById('lidAngle');
     const lidAngleValue = document.getElementById('lidAngleValue');
 
@@ -17,8 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const oldListeners = lidAngleSliderRef.cloneNode(true);
         lidAngleSliderRef.parentNode.replaceChild(oldListeners, lidAngleSliderRef);
         lidAngleSliderRef = oldListeners;
+        
+        console.log('Attaching slider listener to:', lidAngleSliderRef);
 
         lidAngleSliderRef.addEventListener('input', () => {
+            console.log('SLIDER EVENT TRIGGERED');
             // Visual debug: flash slider background
             lidAngleSliderRef.style.background = '#fffd7f';
             setTimeout(() => { lidAngleSliderRef.style.background = ''; }, 150);
@@ -68,29 +68,27 @@ document.addEventListener('DOMContentLoaded', () => {
         lidAngleSliderRef.dispatchEvent(event);
     }
 
-    function switchMode(mode) {
+    function switchMode(mode = 'design') {
         if (activeSimulator && typeof activeSimulator.destroy === 'function') {
             activeSimulator.destroy();
         }
 
-        if (mode === 'design') {
-            simulationControls.style.display = 'none';
-            designControls.style.display = 'block';
-            activeSimulator = new DesignerUI(canvas);
-        } else {
-            simulationControls.style.display = 'block';
-            designControls.style.display = 'none';
-            activeSimulator = new CrossHingeSimulator(canvas);
-        }
+        // Since we don't have mode switching elements, always use DesignerUI
+        activeSimulator = new DesignerUI(canvas);
+        
         // Always (re-)attach the slider listener after switching mode
         attachSliderListener();
     }
 
-    designModeSelect.addEventListener('change', (event) => {
-        switchMode(event.target.value);
-    });
-
-    // Initialize with the default mode
-    switchMode(designModeSelect.value);
+    console.log('Initializing application with DesignerUI');
+    // Initialize with design mode
+    switchMode();
+    
+    // Double-check if slider is properly initialized
+    setTimeout(() => {
+        console.log('Active simulator:', activeSimulator);
+        console.log('Lid angle slider:', lidAngleSlider);
+        console.log('Slider listener reference:', lidAngleSliderRef);
+    }, 500);
 
 });
