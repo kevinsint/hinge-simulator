@@ -21,10 +21,11 @@ class DesignerUI {
     reset() {
         const baseRect = this.getBaseRect();
         this.lidHeight = 100;
+        this.lidDelta = 20; // Space between the lid and the base
         this.lidWidth = baseRect.maxX - baseRect.minX;
 
         const lidCenterX = (baseRect.minX + baseRect.maxX) / 2;
-        const lidCenterY = baseRect.minY - (this.lidHeight / 2);
+        const lidCenterY = baseRect.minY - (this.lidHeight / 2) - this.lidDelta;
         this.initialLidTransform = {
             center: { x: lidCenterX, y: lidCenterY },
             angle: 0
