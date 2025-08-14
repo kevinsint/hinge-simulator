@@ -20,16 +20,37 @@ export class DesignerUI {
     }
 
     reset() {
-        console.log('Resetting DesignerUI mechanism');
+        const baseRect = this.getBaseRect();
+        this.lidHeight = 100;
+        this.lidDelta = 20; // Space between the lid and the base
+        this.lidWidth = baseRect.maxX - baseRect.minX;
+
+        const lidCenterX = (baseRect.minX + baseRect.maxX) / 2;
+        const lidCenterY = baseRect.minY - (this.lidHeight / 2) - this.lidDelta;
+        this.initialLidTransform = {
+            center: { x: lidCenterX, y: lidCenterY },
+            angle: 0
+        };
+
         this.mechanism.pivots = {
             A: { x: 250, y: 500 },
             D: { x: 550, y: 500 },
-            B: { x: 500, y: 450 },
-            C: { x: 300, y: 450 }
+            B: { x: lidCenterX + 100, y: lidCenterY },
+            C: { x: lidCenterX - 100, y: lidCenterY }
         };
+
+        this.initialPivots = JSON.parse(JSON.stringify(this.mechanism.pivots));
         this.animatedState = null;
+
+        // Store the initial offsets of B and C relative to the lid's center
+        this.pivotOffsets = {
+            B: { x: this.mechanism.pivots.B.x - this.initialLidTransform.center.x, y: this.mechanism.pivots.B.y - this.initialLidTransform.center.y },
+            C: { x: this.mechanism.pivots.C.x - this.initialLidTransform.center.x, y: this.mechanism.pivots.C.y - this.initialLidTransform.center.y }
+        };
+
         const { A, B } = this.mechanism.pivots;
         this.initialInputAngle = Math.atan2(B.y - A.y, B.x - A.x);
+        
         this.storeInitialOrientations();
         this.lastValidC = this.mechanism.pivots.C;
         this.calculateAngleLimits();
@@ -58,22 +79,25 @@ export class DesignerUI {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         const baseRect = this.getBaseRect();
         this.drawBoxBase(this.ctx, baseRect);
+
         const isAnimated = this.animatedState && this.lastResult && this.lastResult.isValid;
         const pivotsToDraw = isAnimated ? this.animatedState : this.mechanism.pivots;
         const color = isAnimated ? 'rgba(0, 100, 255, 0.7)' : 'rgba(0, 0, 0, 0.5)';
+
         if (this.lastResult && this.lastResult.isValid) {
             console.log('[DesignerUI.render] Drawing mechanism with pivots:', JSON.stringify(pivotsToDraw));
             this.drawMechanism(pivotsToDraw, color);
-        } else if (!isAnimated) {
-            // Draw error message if no valid state
-            console.warn('[DesignerUI.render] No valid configuration for this angle.');
-            this.ctx.save();
-            this.ctx.font = '28px Arial';
-            this.ctx.fillStyle = 'red';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText('No valid configuration for this angle', this.canvas.width / 2, this.canvas.height / 2);
-            this.ctx.restore();
+            if (isAnimated) {
+                this.drawLid(pivotsToDraw); // Draw the moving lid
+            } else {
+                this.drawClosedLid(); // Draw the static, closed lid
+            }
+        } else {
+            // If config is invalid, still show the static lid for reference
+            this.drawClosedLid();
         }
+
+        // Draw pivots on top of everything
         this.drawPivot(pivotsToDraw.A, 'blue', 'A');
         this.drawPivot(pivotsToDraw.D, 'blue', 'D');
         this.drawPivot(pivotsToDraw.B, 'red', 'B');
@@ -88,6 +112,42 @@ export class DesignerUI {
         ctx.fillRect(base.minX, base.minY, base.maxX - base.minX, base.maxY - base.minY);
         ctx.strokeRect(base.minX, base.minY, base.maxX - base.minX, base.maxY - base.minY);
         ctx.restore();
+    }
+
+    drawClosedLid() {
+        this.ctx.save();
+        this.ctx.translate(this.initialLidTransform.center.x, this.initialLidTransform.center.y);
+        this.ctx.rotate(this.initialLidTransform.angle);
+
+        this.ctx.fillStyle = 'rgba(180, 180, 180, 0.8)';
+        this.ctx.strokeStyle = '#444';
+        this.ctx.lineWidth = 1;
+        this.ctx.fillRect(-this.lidWidth / 2, -this.lidHeight / 2, this.lidWidth, this.lidHeight);
+        this.ctx.strokeRect(-this.lidWidth / 2, -this.lidHeight / 2, this.lidWidth, this.lidHeight);
+        
+        this.ctx.restore();
+    }
+
+    drawLid(animatedPivots) {
+        const { B: B0, C: C0 } = this.initialPivots;
+        const { B: B1, C: C1 } = animatedPivots;
+
+        const transform = FourBarLinkageCalculator.getTransform(B0, C0, B1, C1);
+
+        const newLidCenter = FourBarLinkageCalculator.applyTransform(this.initialLidTransform.center, transform);
+        const newLidAngle = this.initialLidTransform.angle + transform.angle;
+
+        this.ctx.save();
+        this.ctx.translate(newLidCenter.x, newLidCenter.y);
+        this.ctx.rotate(newLidAngle);
+
+        this.ctx.fillStyle = 'rgba(180, 180, 180, 0.8)';
+        this.ctx.strokeStyle = '#444';
+        this.ctx.lineWidth = 1;
+        this.ctx.fillRect(-this.lidWidth / 2, -this.lidHeight / 2, this.lidWidth, this.lidHeight);
+        this.ctx.strokeRect(-this.lidWidth / 2, -this.lidHeight / 2, this.lidWidth, this.lidHeight);
+        
+        this.ctx.restore();
     }
 
     drawMechanism(pivots, color) {
@@ -257,29 +317,35 @@ export class DesignerUI {
 
     handleMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        const hitTestResult = this.hitTest(mouseX, mouseY);
-        if (hitTestResult.hit) {
-            this.dragState = { isDragging: true, pivotName: hitTestResult.pivotName };
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const hitResult = this.hitTest(x, y);
+
+        if (hitResult.hit) {
+            this.dragState = {
+                isDragging: true,
+                pivotName: hitResult.pivotName,
+                startX: x,
+                startY: y
+            };
             this.canvas.style.cursor = 'grabbing';
-            this.animatedState = null;
-            this.updateAndRender();
         }
     }
 
     handleMouseMove(e) {
         if (!this.dragState.isDragging) return;
         const rect = this.canvas.getBoundingClientRect();
-        let mouseX = e.clientX - rect.left;
-        let mouseY = e.clientY - rect.top;
+        let x = e.clientX - rect.left;
+        let y = e.clientY - rect.top;
         const { pivotName } = this.dragState;
+
         if (pivotName === 'A' || pivotName === 'D') {
             const baseRect = this.getBaseRect();
-            mouseX = Math.max(baseRect.minX, Math.min(baseRect.maxX, mouseX));
-            mouseY = Math.max(baseRect.minY, Math.min(baseRect.maxY, mouseY));
+            x = Math.max(baseRect.minX, Math.min(baseRect.maxX, x));
+            y = Math.max(baseRect.minY, Math.min(baseRect.maxY, y));
         }
-        this.mechanism.pivots[pivotName] = { x: mouseX, y: mouseY };
+
+        this.mechanism.pivots[pivotName] = { x, y };
         this.updateAndRender();
     }
 
@@ -287,11 +353,17 @@ export class DesignerUI {
         if (!this.dragState.isDragging) return;
         this.dragState.isDragging = false;
         this.canvas.style.cursor = 'default';
+
+        // Lock in the new pivot positions as the starting point for the next animation
+        this.initialPivots = JSON.parse(JSON.stringify(this.mechanism.pivots));
+
         const { A, B } = this.mechanism.pivots;
         this.initialInputAngle = Math.atan2(B.y - A.y, B.x - A.x);
         this.storeInitialOrientations();
         this.lastValidC = this.mechanism.pivots.C;
         this.calculateAngleLimits();
+        this.animatedState = null; // Reset animation to show the static view
+        // The final render call is handled by the override
     }
 
     storeInitialOrientations() {
@@ -419,17 +491,20 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     designerUI.handleMouseUp = function(e) {
-        if (!this.dragState.isDragging) return;
-        Object.getPrototypeOf(this).handleMouseUp.call(this, e);
-        applyAnimation();
+        const originalMethod = Object.getPrototypeOf(this).handleMouseUp;
+        originalMethod.call(this, e);
+
+        // After the state is updated, re-render and apply the animation to the slider
+        this.updateAndRender();
     };
 
-    // Initialize the mechanism
-    resetAndCenterSlider();
-    
-    // NOTE: The main animation slider listener is now moved to main.js
-    // to properly handle both design and simulation modes
-    
+    animationSlider.addEventListener('input', () => {
+        const percentage = animationSlider.value / 180;
+        const totalRange = designerUI.angleLimits.max - designerUI.angleLimits.min;
+        const angle = designerUI.angleLimits.min + (percentage * totalRange);
+        animationSliderValue.textContent = `${(angle * 180 / Math.PI).toFixed(0)}°`;
+        designerUI.animate(percentage);
+    });
 
     resetButton.addEventListener('click', resetAndCenterSlider);
 

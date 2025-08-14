@@ -96,6 +96,32 @@ export class FourBarLinkageCalculator {
         return false; // Doesn't fall in any of the above cases
     }
 
+    static getTransform(p1_from, p2_from, p1_to, p2_to) {
+        const angle_from = Math.atan2(p2_from.y - p1_from.y, p2_from.x - p1_from.x);
+        const angle_to = Math.atan2(p2_to.y - p1_to.y, p2_to.x - p1_to.x);
+        
+        const angle = angle_to - angle_from;
+        
+        const center_from = { x: (p1_from.x + p2_from.x) / 2, y: (p1_from.y + p2_from.y) / 2 };
+        const center_to = { x: (p1_to.x + p2_to.x) / 2, y: (p1_to.y + p2_to.y) / 2 };
+
+        return { angle, center_from, center_to };
+    }
+
+    static applyTransform(point, transform) {
+        // First, rotate the point around the 'from' center
+        const tempX = point.x - transform.center_from.x;
+        const tempY = point.y - transform.center_from.y;
+        
+        const rotatedX = tempX * Math.cos(transform.angle) - tempY * Math.sin(transform.angle);
+        const rotatedY = tempX * Math.sin(transform.angle) + tempY * Math.cos(transform.angle);
+        
+        // Then, translate the point to the new center
+        const finalX = rotatedX + transform.center_to.x;
+        const finalY = rotatedY + transform.center_to.y;
+        
+        return { x: finalX, y: finalY };
+    }
 
     static circleCircleIntersection(p1, r1, p2, r2) {
         const d = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
