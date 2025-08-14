@@ -381,10 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
         originalMethod.call(this, e);
 
         // After the state is updated, re-render and apply the animation to the slider
-        if (!this.dragState.isDragging) { // Ensure drag has ended
-            this.updateAndRender();
-            applyAnimation();
-        }
+        this.updateAndRender();
     };
 
     animationSlider.addEventListener('input', () => {
