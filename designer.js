@@ -20,7 +20,7 @@ class DesignerUI {
 
     reset() {
         const baseRect = this.getBaseRect();
-        this.lidHeight = 20;
+        this.lidHeight = 100;
         this.lidWidth = baseRect.maxX - baseRect.minX;
 
         const lidCenterX = (baseRect.minX + baseRect.maxX) / 2;
