@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let lidAngleSliderRef = lidAngleSlider;
     // Track last valid slider percentage (0..100)
-    let lastValidPct = 50;
+    let lastValidPct = 0;
     function attachSliderListener() {
         // Clean up any existing listeners by cloning
         const oldListeners = lidAngleSliderRef.cloneNode(true);
@@ -24,19 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
         lidAngleSliderRef.max = '100';
         lidAngleSliderRef.step = '1';
 
-        const syncAngleLimitsUI = () => {
-            if (!(activeSimulator instanceof DesignerUI)) return;
-            if (typeof activeSimulator.calculateAngleLimits === 'function') {
-                activeSimulator.calculateAngleLimits();
-            }
-            const minDeg = (activeSimulator.angleLimits.min * 180 / Math.PI).toFixed(1);
-            const maxDeg = (activeSimulator.angleLimits.max * 180 / Math.PI).toFixed(1);
-            const validRange = (activeSimulator.angleLimits.max > activeSimulator.angleLimits.min);
-            const statusDiv = document.getElementById('angleLimitsStatus');
-            if (statusDiv) {
-                statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is ${validRange ? 'animatable' : 'locked (not animatable)'}.`;
-            }
-        };
 
         const pctToAngle = (pct) => {
             const min = activeSimulator.angleLimits.min;
@@ -91,7 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Handle differently based on simulator type
             if (activeSimulator instanceof DesignerUI) {
-                syncAngleLimitsUI();
                 // Interpret slider value as percentage 0..100 and clamp to nearest valid
                 let pct = Number(lidAngleSliderRef.value);
                 if (Number.isNaN(pct)) pct = lastValidPct;
@@ -122,25 +108,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Since we don't have mode switching elements, always use DesignerUI
-        activeSimulator = new DesignerUI(canvas);
-        // Initialize slider and UI to use full width within limits
-        if (activeSimulator instanceof DesignerUI) {
-            if (typeof activeSimulator.reset === 'function') activeSimulator.reset();
-            if (typeof activeSimulator.calculateAngleLimits === 'function') activeSimulator.calculateAngleLimits();
-            lidAngleSliderRef.min = '0';
-            lidAngleSliderRef.max = '100';
-            lidAngleSliderRef.step = '1';
-            lastValidPct = 50;
-            lidAngleSliderRef.value = String(lastValidPct);
-            const angleOffset = activeSimulator.angleLimits.min + 0.5 * (activeSimulator.angleLimits.max - activeSimulator.angleLimits.min);
-            activeSimulator.animate(angleOffset);
-            lidAngleValue.textContent = `${(angleOffset * 180 / Math.PI).toFixed(0)}°`;
+        const syncUI = () => {
+            if (!(activeSimulator instanceof DesignerUI)) return;
+
+            const minDeg = (activeSimulator.angleLimits.min * 180 / Math.PI).toFixed(1);
+            const maxDeg = (activeSimulator.angleLimits.max * 180 / Math.PI).toFixed(1);
+            const validRange = activeSimulator.angleLimits.max > activeSimulator.angleLimits.min;
             const statusDiv = document.getElementById('angleLimitsStatus');
+
             if (statusDiv) {
-                const minDeg = (activeSimulator.angleLimits.min * 180 / Math.PI).toFixed(1);
-                const maxDeg = (activeSimulator.angleLimits.max * 180 / Math.PI).toFixed(1);
-                statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is animatable.`;
+                statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is ${validRange ? 'animatable' : 'locked'}.`;
             }
+        };
+
+        activeSimulator = new DesignerUI(canvas, syncUI);
+
+        // Initial UI sync
+        syncUI();
+        if (activeSimulator instanceof DesignerUI) {
+            if (typeof activeSimulator.reset === 'function') {
+                activeSimulator.reset();
+            }
+
+            // Set slider to the minimum position (lid closed) upon initialization.
+            lastValidPct = 0;
+            lidAngleSliderRef.value = String(lastValidPct);
+
+            // Trigger a slider input event to apply the initial state.
+            const event = new Event('input');
+            lidAngleSliderRef.dispatchEvent(event);
         }
         
         // Always (re-)attach the slider listener after switching mode

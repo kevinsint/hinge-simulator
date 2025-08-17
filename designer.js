@@ -1,8 +1,9 @@
 import { FourBarLinkageCalculator } from './simulator.js';
 
 export class DesignerUI {
-    constructor(canvas) {
+    constructor(canvas, onStateChange = () => {}) {
         this.canvas = canvas;
+        this.onStateChange = onStateChange;
         this.ctx = canvas.getContext('2d');
         this.lastResult = null;
         this.dragState = { isDragging: false };
@@ -78,6 +79,7 @@ export class DesignerUI {
             isValid: pivotsValid && isCrossed
         };
         this.render();
+        this.onStateChange(this.lastResult);
         return this.lastResult;
     }
 
@@ -295,14 +297,8 @@ export class DesignerUI {
     }
 
     if (chosenSolution) {
-        // Additional safety: limit lid rotation to +/- 90° relative to initial pose to prevent visual flip
-        const { B: B0, C: C0 } = this.initialPivots || { B, C };
-        const transform = FourBarLinkageCalculator.getTransform(B0, C0, newB, chosenSolution);
-        const deg = Math.abs(transform.angle * 180 / Math.PI);
-        if (deg > 90 - 1e-3) {
-            console.log(`[calculateAnimatedStateForAngle] Rejecting solution: lid rotation ${deg.toFixed(2)}° exceeds 90° limit`);
-            return null;
-        }
+        // Allow full range of motion until mechanism reaches its natural crossed limits
+        // The mechanism should be able to move until it physically cannot cross anymore
 
         console.log(`[calculateAnimatedStateForAngle] Final solution C: (${chosenSolution.x.toFixed(1)}, ${chosenSolution.y.toFixed(1)})`);
         this.lastValidC = chosenSolution;
@@ -418,17 +414,17 @@ export class DesignerUI {
         console.log('[calculateAngleLimits] Initial input angle:', this.initialInputAngle);
         
         // Helper function to find the limit in one direction using binary search for high precision.
-        const findLimit = (direction) => {
-            console.log(`[findLimit] Starting search in direction: ${direction}`);
-            let low = 0;
-            let high = Math.PI * 2 * direction;
-            let best = 0;
+        const findLimit = (direction, startAngle = 0) => {
+            console.log(`[findLimit] Starting search in direction: ${direction} from angle: ${startAngle}`);
+            let low = startAngle;
+            let high = startAngle + Math.PI * 2 * direction;
+            let best = startAngle;
             let validFound = false;
 
             // Perform binary search for a fixed number of iterations to find the limit with high precision.
             for (let i = 0; i < 100; i++) {
                 const mid = low + (high - low) / 2;
-                if (mid === best) {
+                if (Math.abs(mid - best) < 0.0001) {
                     console.log(`[findLimit] Converged at iteration ${i}, best: ${best}`);
                     break; // Converged
                 }
@@ -439,9 +435,17 @@ export class DesignerUI {
                 if (result) {
                     validFound = true;
                     best = mid; // This angle is valid, try for a larger one (in magnitude)
-                    low = mid;
+                    if (direction > 0) {
+                        low = mid;
+                    } else {
+                        high = mid;
+                    }
                 } else {
-                    high = mid; // This angle is invalid, the limit is in the lower half
+                    if (direction > 0) {
+                        high = mid; // This angle is invalid, the limit is in the lower half
+                    } else {
+                        low = mid;
+                    }
                 }
                 
                 // Break early if we've narrowed down enough
@@ -455,8 +459,16 @@ export class DesignerUI {
             return best;
         };
 
-        const maxAngle = findLimit(1);
-        const minAngle = findLimit(-1);
+        // Min position: lid closed (starting position = 0 offset)
+        const minAngle = 0;
+        
+        // Max position: find the maximum angle in both positive and negative directions
+        // and use the one with the larger absolute value to get the full range
+        const maxPositive = findLimit(1, 0);
+        const maxNegative = findLimit(-1, 0);
+        
+        // Choose the direction that gives us the larger range
+        const maxAngle = Math.abs(maxPositive) > Math.abs(maxNegative) ? maxPositive : maxNegative;
         
         console.log(`[calculateAngleLimits] Results: min=${minAngle.toFixed(4)}, max=${maxAngle.toFixed(4)}`);
         this.angleLimits = { min: minAngle, max: maxAngle };
