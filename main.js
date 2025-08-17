@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeSimulator = null;
 
     let lidAngleSliderRef = lidAngleSlider;
+    // Track last valid slider percentage (0..100)
+    let lastValidPct = 50;
     function attachSliderListener() {
         // Clean up any existing listeners by cloning
         const oldListeners = lidAngleSliderRef.cloneNode(true);
@@ -16,6 +18,62 @@ document.addEventListener('DOMContentLoaded', () => {
         lidAngleSliderRef = oldListeners;
         
         console.log('Attaching slider listener to:', lidAngleSliderRef);
+
+        // Always use full slider range 0..100 mapped to [min,max] radians
+        lidAngleSliderRef.min = '0';
+        lidAngleSliderRef.max = '100';
+        lidAngleSliderRef.step = '1';
+
+        const syncAngleLimitsUI = () => {
+            if (!(activeSimulator instanceof DesignerUI)) return;
+            if (typeof activeSimulator.calculateAngleLimits === 'function') {
+                activeSimulator.calculateAngleLimits();
+            }
+            const minDeg = (activeSimulator.angleLimits.min * 180 / Math.PI).toFixed(1);
+            const maxDeg = (activeSimulator.angleLimits.max * 180 / Math.PI).toFixed(1);
+            const validRange = (activeSimulator.angleLimits.max > activeSimulator.angleLimits.min);
+            const statusDiv = document.getElementById('angleLimitsStatus');
+            if (statusDiv) {
+                statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is ${validRange ? 'animatable' : 'locked (not animatable)'}.`;
+            }
+        };
+
+        const pctToAngle = (pct) => {
+            const min = activeSimulator.angleLimits.min;
+            const max = activeSimulator.angleLimits.max;
+            return min + (pct / 100) * (max - min);
+        };
+
+        const clampToValidPct = (targetPct) => {
+            // Binary search from lastValidPct toward targetPct to find boundary
+            const savedLastValidC = activeSimulator.lastValidC;
+            const isValidPct = (p) => !!activeSimulator.calculateAnimatedStateForAngle(pctToAngle(p));
+            let pct = Math.max(0, Math.min(100, targetPct));
+            if (isValidPct(pct)) {
+                activeSimulator.lastValidC = savedLastValidC; // restore
+                return Math.round(pct);
+            }
+            let lo = Math.min(pct, lastValidPct);
+            let hi = Math.max(pct, lastValidPct);
+            // Ensure at least one side valid; if not, stick to lastValidPct
+            let loValid = isValidPct(lo);
+            let hiValid = isValidPct(hi);
+            if (!loValid && !hiValid) {
+                activeSimulator.lastValidC = savedLastValidC;
+                return lastValidPct;
+            }
+            // Ensure 'left' is valid
+            let left = hiValid && !loValid ? hi : lo;
+            let right = hiValid && !loValid ? lo : hi;
+            if (!isValidPct(left) && isValidPct(right)) { const t = left; left = right; right = t; }
+            for (let i = 0; i < 25; i++) {
+                const mid = (left + right) / 2;
+                if (isValidPct(mid)) left = mid; else right = mid;
+                if (Math.abs(right - left) < 0.01) break;
+            }
+            activeSimulator.lastValidC = savedLastValidC;
+            return Math.round(left);
+        };
 
         lidAngleSliderRef.addEventListener('input', () => {
             console.log('SLIDER EVENT TRIGGERED');
@@ -33,34 +91,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Handle differently based on simulator type
             if (activeSimulator instanceof DesignerUI) {
-                // Always recalculate angle limits after pivots move
-                if (typeof activeSimulator.calculateAngleLimits === 'function') {
-                    activeSimulator.calculateAngleLimits();
-                }
-                console.log('[Slider Event] DesignerUI angleLimits:', JSON.stringify(activeSimulator.angleLimits));
-                const minDeg = (activeSimulator.angleLimits.min * 180 / Math.PI).toFixed(1);
-                const maxDeg = (activeSimulator.angleLimits.max * 180 / Math.PI).toFixed(1);
-                const validRange = (activeSimulator.angleLimits.max > activeSimulator.angleLimits.min);
-                const statusDiv = document.getElementById('angleLimitsStatus');
-                if (statusDiv) {
-                    if (validRange) {
-                        statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is animatable.`;
-                    } else {
-                        statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is locked (not animatable).`;
-                    }
-                }
-                const percentage = lidAngleSliderRef.value / 180;
-                const angleOffset = activeSimulator.angleLimits.min + (percentage * (activeSimulator.angleLimits.max - activeSimulator.angleLimits.min));
-                console.log(`[Slider Event] Calculated angleOffset for DesignerUI: ${angleOffset}`);
+                syncAngleLimitsUI();
+                // Interpret slider value as percentage 0..100 and clamp to nearest valid
+                let pct = Number(lidAngleSliderRef.value);
+                if (Number.isNaN(pct)) pct = lastValidPct;
+                pct = clampToValidPct(pct);
+                lidAngleSliderRef.value = String(pct);
+                const angleOffset = pctToAngle(pct);
+                console.log(`[Slider Event] Calculated angleOffset for DesignerUI (clamped): ${angleOffset}`);
                 activeSimulator.animate(angleOffset);
+                lidAngleValue.textContent = `${(angleOffset * 180 / Math.PI).toFixed(0)}°`;
+                if (activeSimulator.animatedState) lastValidPct = pct;
             } else {
                 // Use direct radian value for simulation mode
-                const angleInRadians = (lidAngleSliderRef.value / 180) * Math.PI;
+                const angleInRadians = (Number(lidAngleSliderRef.value) / 100) * Math.PI; // 0..100 -> 0..π
                 console.log(`[Slider Event] Calculated angleInRadians for Simulation: ${angleInRadians}`);
                 activeSimulator.animate(angleInRadians);
+                lidAngleValue.textContent = `${(angleInRadians * 180 / Math.PI).toFixed(0)}°`;
             }
-
-            lidAngleValue.textContent = `${lidAngleSliderRef.value}\u00b0`;
         });
 
         // Trigger the slider once to set initial state
@@ -75,6 +123,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Since we don't have mode switching elements, always use DesignerUI
         activeSimulator = new DesignerUI(canvas);
+        // Initialize slider and UI to use full width within limits
+        if (activeSimulator instanceof DesignerUI) {
+            if (typeof activeSimulator.reset === 'function') activeSimulator.reset();
+            if (typeof activeSimulator.calculateAngleLimits === 'function') activeSimulator.calculateAngleLimits();
+            lidAngleSliderRef.min = '0';
+            lidAngleSliderRef.max = '100';
+            lidAngleSliderRef.step = '1';
+            lastValidPct = 50;
+            lidAngleSliderRef.value = String(lastValidPct);
+            const angleOffset = activeSimulator.angleLimits.min + 0.5 * (activeSimulator.angleLimits.max - activeSimulator.angleLimits.min);
+            activeSimulator.animate(angleOffset);
+            lidAngleValue.textContent = `${(angleOffset * 180 / Math.PI).toFixed(0)}°`;
+            const statusDiv = document.getElementById('angleLimitsStatus');
+            if (statusDiv) {
+                const minDeg = (activeSimulator.angleLimits.min * 180 / Math.PI).toFixed(1);
+                const maxDeg = (activeSimulator.angleLimits.max * 180 / Math.PI).toFixed(1);
+                statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is animatable.`;
+            }
+        }
         
         // Always (re-)attach the slider listener after switching mode
         attachSliderListener();

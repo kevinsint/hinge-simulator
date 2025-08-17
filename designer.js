@@ -61,11 +61,18 @@ export class DesignerUI {
     updateAndRender() {
         const { A, B, C, D } = this.mechanism.pivots;
         const baseRect = this.getBaseRect();
-        const isInside = (pivot, base) => 
-            pivot.x >= base.minX && pivot.x <= base.maxX &&
-            pivot.y >= base.minY && pivot.y <= base.maxY;
+        // Defensive check: treat missing pivots as outside
+        const isInside = (pivot, base) => {
+            if (!pivot || typeof pivot.x === 'undefined' || typeof pivot.y === 'undefined') return false;
+            return (
+                pivot.x >= base.minX && pivot.x <= base.maxX &&
+                pivot.y >= base.minY && pivot.y <= base.maxY
+            );
+        };
         const pivotsValid = isInside(A, baseRect) && isInside(D, baseRect);
-        const isCrossed = FourBarLinkageCalculator.segmentsIntersect(A, B, C, D);
+        // Only test crossing when all pivots exist
+        const hasAllPivots = A && B && C && D;
+        const isCrossed = hasAllPivots ? FourBarLinkageCalculator.segmentsIntersect(A, B, C, D) : false;
         this.lastResult = {
             pivots: this.mechanism.pivots,
             isValid: pivotsValid && isCrossed
@@ -241,10 +248,22 @@ export class DesignerUI {
     console.log(`[calculateAnimatedStateForAngle] Found ${intersections.length} intersection(s):`, 
                 intersections.map(p => `(${p.x.toFixed(1)}, ${p.y.toFixed(1)})`))
     
-    // Accept all circle-circle intersections as valid solutions
-    // This allows both crossed and non-crossed linkage configurations
-    const validSolutions = intersections;
-    console.log(`[calculateAnimatedStateForAngle] All ${validSolutions.length} intersections considered valid (allowing non-crossed linkages)`);
+    // Only accept intersections that keep the linkage CROSSED
+    // and preserve the initial triangle orientations to avoid flips
+    const initialADB = this.initialOrientations && this.initialOrientations.adb;
+    const initialCDA = this.initialOrientations && this.initialOrientations.cda;
+    const validSolutions = intersections.filter(p => {
+        const crossed = FourBarLinkageCalculator.segmentsIntersect(A, newB, p, D);
+        if (!crossed) return false;
+        // Enforce orientation continuity if we have a reference
+        if (typeof initialADB !== 'undefined' && typeof initialCDA !== 'undefined') {
+            const o_adb = FourBarLinkageCalculator.orientation(A, D, newB);
+            const o_cda = FourBarLinkageCalculator.orientation(p, A, D);
+            return o_adb === initialADB && o_cda === initialCDA;
+        }
+        return true;
+    });
+    console.log(`[calculateAnimatedStateForAngle] ${validSolutions.length} intersection(s) keep crossed linkage and orientation continuity`);
 
     if (validSolutions.length === 0) {
         console.log('[calculateAnimatedStateForAngle] No valid crossed configurations found');
@@ -276,6 +295,15 @@ export class DesignerUI {
     }
 
     if (chosenSolution) {
+        // Additional safety: limit lid rotation to +/- 90° relative to initial pose to prevent visual flip
+        const { B: B0, C: C0 } = this.initialPivots || { B, C };
+        const transform = FourBarLinkageCalculator.getTransform(B0, C0, newB, chosenSolution);
+        const deg = Math.abs(transform.angle * 180 / Math.PI);
+        if (deg > 90 - 1e-3) {
+            console.log(`[calculateAnimatedStateForAngle] Rejecting solution: lid rotation ${deg.toFixed(2)}° exceeds 90° limit`);
+            return null;
+        }
+
         console.log(`[calculateAnimatedStateForAngle] Final solution C: (${chosenSolution.x.toFixed(1)}, ${chosenSolution.y.toFixed(1)})`);
         this.lastValidC = chosenSolution;
         return { A, B: newB, C: chosenSolution, D };
@@ -343,6 +371,16 @@ export class DesignerUI {
             const baseRect = this.getBaseRect();
             x = Math.max(baseRect.minX, Math.min(baseRect.maxX, x));
             y = Math.max(baseRect.minY, Math.min(baseRect.maxY, y));
+        } else if (pivotName === 'B' || pivotName === 'C') {
+            // Constrain B and C to the lid area
+            const lidRect = {
+                minX: this.initialLidTransform.center.x - this.lidWidth / 2,
+                maxX: this.initialLidTransform.center.x + this.lidWidth / 2,
+                minY: this.initialLidTransform.center.y - this.lidHeight / 2,
+                maxY: this.initialLidTransform.center.y + this.lidHeight / 2
+            };
+            x = Math.max(lidRect.minX, Math.min(lidRect.maxX, x));
+            y = Math.max(lidRect.minY, Math.min(lidRect.maxY, y));
         }
 
         this.mechanism.pivots[pivotName] = { x, y };
@@ -363,7 +401,7 @@ export class DesignerUI {
         this.lastValidC = this.mechanism.pivots.C;
         this.calculateAngleLimits();
         this.animatedState = null; // Reset animation to show the static view
-        // The final render call is handled by the override
+        this.updateAndRender(); // Explicitly re-render the final state
     }
 
     storeInitialOrientations() {
@@ -428,6 +466,7 @@ export class DesignerUI {
         const tolerance = 10;
         for (const name in this.mechanism.pivots) {
             const pivot = this.mechanism.pivots[name];
+            if (!pivot || typeof pivot.x === 'undefined' || typeof pivot.y === 'undefined') continue;
             if (FourBarLinkageCalculator.distance({ x, y }, pivot) < tolerance) {
                 return { hit: true, pivotName: name };
             }
@@ -436,77 +475,3 @@ export class DesignerUI {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const canvas = document.getElementById('hingeCanvas');
-    const lidAngleSlider = document.getElementById('lidAngle');
-    const lidAngleValue = document.getElementById('lidAngleValue');
-    const resetButton = document.getElementById('resetPositions');
-    const analysisText = document.getElementById('analysisText');
-    const statusIndicator = document.getElementById('statusIndicator');
-    const animationControl = document.getElementById('animationControl');
-
-    const designerUI = new DesignerUI(canvas);
-
-    const updateAnalysisUI = (result) => {
-        if (!result || !result.isValid) {
-            analysisText.textContent = 'Invalid mechanism configuration. Ensure base pivots are inside the box and links are crossed.';
-            statusIndicator.textContent = 'Invalid Configuration';
-            statusIndicator.className = 'status-indicator status-error';
-            animationControl.style.display = 'none';
-        } else {
-            statusIndicator.textContent = 'Valid Configuration';
-            statusIndicator.className = 'status-indicator status-good';
-            animationControl.style.display = 'block';
-            const { A, B, C, D } = result.pivots;
-            analysisText.innerHTML = `
-                <b>Base Pivots:</b> A: (${A.x.toFixed(1)}, ${A.y.toFixed(1)}), D: (${D.x.toFixed(1)}, ${D.y.toFixed(1)})<br>
-                <b>Floating Pivots:</b> B: (${B.x.toFixed(1)}, ${B.y.toFixed(1)}), C: (${C.x.toFixed(1)}, ${C.y.toFixed(1)})<br>
-                <b>Link Lengths:</b> Input(A-B): ${FourBarLinkageCalculator.distance(A, B).toFixed(1)}, 
-                Coupler(B-C): ${FourBarLinkageCalculator.distance(B, C).toFixed(1)}, 
-                Output(C-D): ${FourBarLinkageCalculator.distance(C, D).toFixed(1)}, 
-                Ground(A-D): ${FourBarLinkageCalculator.distance(A, D).toFixed(1)}
-            `;
-        }
-    };
-
-    const applyAnimation = () => {
-        designerUI.calculateAngleLimits();
-        const range = designerUI.angleLimits.max - designerUI.angleLimits.min;
-        let percentage = 0.5; // Default to the middle if no range
-        if (range > 0) {
-            percentage = -designerUI.angleLimits.min / range;
-        }
-        const angleOffset = designerUI.angleLimits.min + (percentage * range);
-        designerUI.animate(angleOffset);
-    };
-
-    const resetAndCenterSlider = () => {
-        designerUI.reset();
-        applyAnimation();
-    };
-
-    designerUI.updateAndRender = function() {
-        const result = Object.getPrototypeOf(this).updateAndRender.call(this);
-        updateAnalysisUI(result);
-    };
-
-    designerUI.handleMouseUp = function(e) {
-        const originalMethod = Object.getPrototypeOf(this).handleMouseUp;
-        originalMethod.call(this, e);
-
-        // After the state is updated, re-render and apply the animation to the slider
-        this.updateAndRender();
-    };
-
-    animationSlider.addEventListener('input', () => {
-        const percentage = animationSlider.value / 180;
-        const totalRange = designerUI.angleLimits.max - designerUI.angleLimits.min;
-        const angle = designerUI.angleLimits.min + (percentage * totalRange);
-        animationSliderValue.textContent = `${(angle * 180 / Math.PI).toFixed(0)}°`;
-        designerUI.animate(percentage);
-    });
-
-    resetButton.addEventListener('click', resetAndCenterSlider);
-
-    resetAndCenterSlider();
-});
