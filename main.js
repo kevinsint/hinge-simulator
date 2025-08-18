@@ -12,6 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const lidHeightInput = document.getElementById('lidHeight');
     const baseHeightInput = document.getElementById('baseHeight');
     const lidGapInput = document.getElementById('lidGap');
+    
+    // Export/Import controls
+    const exportButton = document.getElementById('exportConfig');
+    const importButton = document.getElementById('importConfig');
+    const importFile = document.getElementById('importFile');
 
     let activeSimulator = null;
 
@@ -195,6 +200,103 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDimensionControl(lidHeightInput, 'lidHeight');
     setupDimensionControl(baseHeightInput, 'baseHeight');
     setupDimensionControl(lidGapInput, 'lidGap');
+
+    // Export/Import functionality
+    function exportConfiguration() {
+        const simulatorConfig = activeSimulator && typeof activeSimulator.getConfiguration === 'function' 
+            ? activeSimulator.getConfiguration() 
+            : {};
+            
+        const config = {
+            boxWidth: parseInt(boxWidthInput.value),
+            lidHeight: parseInt(lidHeightInput.value),
+            baseHeight: parseInt(baseHeightInput.value),
+            lidGap: parseInt(lidGapInput.value),
+            pivots: simulatorConfig.pivots || null,
+            exportDate: new Date().toISOString(),
+            version: "2.0"
+        };
+        
+        const dataStr = JSON.stringify(config, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(dataBlob);
+        link.download = `hinge-config-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function importConfiguration(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const config = JSON.parse(e.target.result);
+                
+                // Update input fields
+                if (typeof config.boxWidth === 'number') boxWidthInput.value = config.boxWidth;
+                if (typeof config.lidHeight === 'number') lidHeightInput.value = config.lidHeight;
+                if (typeof config.baseHeight === 'number') baseHeightInput.value = config.baseHeight;
+                if (typeof config.lidGap === 'number') lidGapInput.value = config.lidGap;
+                
+                // Update box dimensions first
+                if (activeSimulator && typeof activeSimulator.updateBoxDimensions === 'function') {
+                    const dimensions = {
+                        width: config.boxWidth,
+                        lidHeight: config.lidHeight,
+                        baseHeight: config.baseHeight,
+                        lidGap: config.lidGap
+                    };
+                    activeSimulator.updateBoxDimensions(dimensions);
+                }
+                
+                // Apply pivot positions if available
+                if (config.pivots && activeSimulator && typeof activeSimulator.setConfiguration === 'function') {
+                    activeSimulator.setConfiguration({
+                        boxDimensions: {
+                            width: config.boxWidth,
+                            baseHeight: config.baseHeight,
+                            lidHeight: config.lidHeight,
+                            lidGap: config.lidGap
+                        },
+                        pivots: config.pivots
+                    });
+                }
+                
+                // Reset animation state
+                lastValidPct = 0;
+                lidAngleSliderRef.value = '0';
+                
+                // Trigger slider update to recalculate limits
+                const event = new Event('input');
+                lidAngleSliderRef.dispatchEvent(event);
+                
+                console.log('Configuration imported successfully');
+            } catch (error) {
+                console.error('Error importing configuration:', error);
+                alert('Error importing configuration file. Please check the file format.');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // Event listeners for export/import
+    if (exportButton) {
+        exportButton.addEventListener('click', exportConfiguration);
+    }
+
+    if (importButton && importFile) {
+        importButton.addEventListener('click', () => {
+            importFile.click();
+        });
+        
+        importFile.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                importConfiguration(e.target.files[0]);
+            }
+        });
+    }
 
     console.log('Initializing application with DesignerUI');
     // Initialize with design mode

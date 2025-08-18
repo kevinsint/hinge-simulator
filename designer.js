@@ -527,6 +527,30 @@ export class DesignerUI {
         this.reset();
     }
 
+    getConfiguration() {
+        return {
+            boxDimensions: { ...this.boxDimensions },
+            pivots: JSON.parse(JSON.stringify(this.mechanism.pivots))
+        };
+    }
+
+    setConfiguration(config) {
+        if (config.boxDimensions) {
+            this.boxDimensions = { ...this.boxDimensions, ...config.boxDimensions };
+        }
+        if (config.pivots) {
+            this.mechanism.pivots = JSON.parse(JSON.stringify(config.pivots));
+            this.initialPivots = JSON.parse(JSON.stringify(this.mechanism.pivots));
+            
+            const { A, B } = this.mechanism.pivots;
+            this.initialInputAngle = Math.atan2(B.y - A.y, B.x - A.x);
+            this.storeInitialOrientations();
+            this.lastValidC = this.mechanism.pivots.C;
+            this.calculateAngleLimits();
+        }
+        this.updateAndRender();
+    }
+
     hitTest(x, y) {
         const tolerance = 10;
         for (const name in this.mechanism.pivots) {
