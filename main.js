@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Since we don't have mode switching elements, always use DesignerUI
-        const syncUI = () => {
+        const syncUI = (result) => {
             if (!(activeSimulator instanceof DesignerUI)) return;
 
             const minDeg = (activeSimulator.angleLimits.min * 180 / Math.PI).toFixed(1);
@@ -130,6 +130,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (statusDiv) {
                 statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is ${validRange ? 'animatable' : 'locked'}.`;
+            }
+
+            // Update pivot positions if available
+            if (result && result.relativePivots) {
+                const { A, B, C, D } = result.relativePivots;
+                
+                const pivotAElement = document.getElementById('pivotA');
+                const pivotBElement = document.getElementById('pivotB');
+                const pivotCElement = document.getElementById('pivotC');
+                const pivotDElement = document.getElementById('pivotD');
+                
+                if (pivotAElement) pivotAElement.textContent = `x: ${A.x}, y: ${A.y}`;
+                if (pivotBElement) pivotBElement.textContent = `x: ${B.x}, y: ${B.y}`;
+                if (pivotCElement) pivotCElement.textContent = `x: ${C.x}, y: ${C.y}`;
+                if (pivotDElement) pivotDElement.textContent = `x: ${D.x}, y: ${D.y}`;
             }
         };
 

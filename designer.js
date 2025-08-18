@@ -85,7 +85,8 @@ export class DesignerUI {
         const isCrossed = hasAllPivots ? FourBarLinkageCalculator.segmentsIntersect(A, B, C, D) : false;
         this.lastResult = {
             pivots: this.mechanism.pivots,
-            isValid: pivotsValid && isCrossed
+            isValid: pivotsValid && isCrossed,
+            relativePivots: this.getRelativePivotPositions()
         };
         this.render();
         this.onStateChange(this.lastResult);
@@ -532,6 +533,34 @@ export class DesignerUI {
             boxDimensions: { ...this.boxDimensions },
             pivots: JSON.parse(JSON.stringify(this.mechanism.pivots))
         };
+    }
+
+    getRelativePivotPositions() {
+        const baseRect = this.getBaseRect();
+        const { A, B, C, D } = this.mechanism.pivots;
+        
+        // Base pivots relative to box left and base top
+        const relativeA = {
+            x: Math.round(A.x - baseRect.minX),
+            y: Math.round(A.y - baseRect.minY)
+        };
+        const relativeD = {
+            x: Math.round(D.x - baseRect.minX),
+            y: Math.round(D.y - baseRect.minY)
+        };
+        
+        // Lid pivots relative to box left and lid bottom
+        const lidBottom = baseRect.minY - this.boxDimensions.lidGap;
+        const relativeB = {
+            x: Math.round(B.x - baseRect.minX),
+            y: Math.round(lidBottom - B.y)
+        };
+        const relativeC = {
+            x: Math.round(C.x - baseRect.minX),
+            y: Math.round(lidBottom - C.y)
+        };
+        
+        return { A: relativeA, B: relativeB, C: relativeC, D: relativeD };
     }
 
     setConfiguration(config) {
