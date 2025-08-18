@@ -5,6 +5,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('hingeCanvas');
     const lidAngleSlider = document.getElementById('lidAngle');
     const lidAngleValue = document.getElementById('lidAngleValue');
+    const unlockHingeCheckbox = document.getElementById('unlockHinge');
+    
+    // Box dimension controls
+    const boxWidthInput = document.getElementById('boxWidth');
+    const lidHeightInput = document.getElementById('lidHeight');
+    const baseHeightInput = document.getElementById('baseHeight');
+    const lidGapInput = document.getElementById('lidGap');
 
     let activeSimulator = null;
 
@@ -143,6 +150,52 @@ document.addEventListener('DOMContentLoaded', () => {
         attachSliderListener();
     }
 
+    // Add checkbox event listener for unlocking hinge
+    if (unlockHingeCheckbox) {
+        unlockHingeCheckbox.addEventListener('change', () => {
+            if (activeSimulator && typeof activeSimulator.setHingeUnlocked === 'function') {
+                console.log('Hinge unlock state changed:', unlockHingeCheckbox.checked);
+                activeSimulator.setHingeUnlocked(unlockHingeCheckbox.checked);
+                
+                // Reset slider to minimum position when toggling unlock state
+                lastValidPct = 0;
+                lidAngleSliderRef.value = '0';
+                
+                // Trigger slider update to recalculate limits and position
+                const event = new Event('input');
+                lidAngleSliderRef.dispatchEvent(event);
+            }
+        });
+    }
+
+    // Add event listeners for box dimension controls
+    function setupDimensionControl(input, dimensionKey) {
+        if (input) {
+            input.addEventListener('input', () => {
+                const value = parseInt(input.value);
+                
+                if (activeSimulator && typeof activeSimulator.updateBoxDimensions === 'function') {
+                    const dimensions = {};
+                    dimensions[dimensionKey] = value;
+                    activeSimulator.updateBoxDimensions(dimensions);
+                    
+                    // Reset animation state after dimension change
+                    lastValidPct = 0;
+                    lidAngleSliderRef.value = '0';
+                    
+                    // Trigger slider update to recalculate limits
+                    const event = new Event('input');
+                    lidAngleSliderRef.dispatchEvent(event);
+                }
+            });
+        }
+    }
+
+    setupDimensionControl(boxWidthInput, 'width');
+    setupDimensionControl(lidHeightInput, 'lidHeight');
+    setupDimensionControl(baseHeightInput, 'baseHeight');
+    setupDimensionControl(lidGapInput, 'lidGap');
+
     console.log('Initializing application with DesignerUI');
     // Initialize with design mode
     switchMode();
@@ -152,6 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Active simulator:', activeSimulator);
         console.log('Lid angle slider:', lidAngleSlider);
         console.log('Slider listener reference:', lidAngleSliderRef);
+        console.log('Unlock hinge checkbox:', unlockHingeCheckbox);
     }, 500);
 
 });

@@ -13,6 +13,15 @@ export class DesignerUI {
         this.angleLimits = { min: -Math.PI / 2, max: Math.PI / 2 };
         this.initialOrientations = {};
         this.lastValidC = null;
+        this.hingeUnlocked = false;
+        
+        // Configurable box dimensions
+        this.boxDimensions = {
+            width: 900,
+            baseHeight: 300,
+            lidHeight: 100,
+            lidGap: 20
+        };
 
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
@@ -22,8 +31,8 @@ export class DesignerUI {
 
     reset() {
         const baseRect = this.getBaseRect();
-        this.lidHeight = 100;
-        this.lidDelta = 20; // Space between the lid and the base
+        this.lidHeight = this.boxDimensions.lidHeight;
+        this.lidDelta = this.boxDimensions.lidGap; // Space between the lid and the base
         this.lidWidth = baseRect.maxX - baseRect.minX;
 
         const lidCenterX = (baseRect.minX + baseRect.maxX) / 2;
@@ -250,20 +259,28 @@ export class DesignerUI {
     console.log(`[calculateAnimatedStateForAngle] Found ${intersections.length} intersection(s):`, 
                 intersections.map(p => `(${p.x.toFixed(1)}, ${p.y.toFixed(1)})`))
     
-    // Only accept intersections that keep the linkage CROSSED
-    // and preserve the initial triangle orientations to avoid flips
+    // Filter intersections based on hinge lock state
     const initialADB = this.initialOrientations && this.initialOrientations.adb;
     const initialCDA = this.initialOrientations && this.initialOrientations.cda;
     const validSolutions = intersections.filter(p => {
         const crossed = FourBarLinkageCalculator.segmentsIntersect(A, newB, p, D);
-        if (!crossed) return false;
-        // Enforce orientation continuity if we have a reference
-        if (typeof initialADB !== 'undefined' && typeof initialCDA !== 'undefined') {
-            const o_adb = FourBarLinkageCalculator.orientation(A, D, newB);
-            const o_cda = FourBarLinkageCalculator.orientation(p, A, D);
-            return o_adb === initialADB && o_cda === initialCDA;
+        
+        if (this.hingeUnlocked) {
+            // When unlocked, we still need to maintain continuity to prevent flipping
+            // Accept both crossed and non-crossed, but prefer continuity
+            return true; // Accept all geometric solutions, let continuity logic handle selection
+        } else {
+            // When locked, only accept crossed configurations
+            if (!crossed) return false;
+            
+            // Enforce orientation continuity if we have a reference
+            if (typeof initialADB !== 'undefined' && typeof initialCDA !== 'undefined') {
+                const o_adb = FourBarLinkageCalculator.orientation(A, D, newB);
+                const o_cda = FourBarLinkageCalculator.orientation(p, A, D);
+                return o_adb === initialADB && o_cda === initialCDA;
+            }
+            return true;
         }
-        return true;
     });
     console.log(`[calculateAnimatedStateForAngle] ${validSolutions.length} intersection(s) keep crossed linkage and orientation continuity`);
 
@@ -289,10 +306,21 @@ export class DesignerUI {
             chosenSolution = validSolutions[0];
             console.log('[calculateAnimatedStateForAngle] Multiple solutions, chose closest to last valid');
         } else {
-            // Fallback for the very first frame if needed. This case should be rare.
-            const initialOrientation = FourBarLinkageCalculator.orientation(D, C, B);
-            chosenSolution = validSolutions.find(p => FourBarLinkageCalculator.orientation(D, p, newB) === initialOrientation) || validSolutions[0];
-            console.log('[calculateAnimatedStateForAngle] Multiple solutions, chose based on orientation');
+            // For initial position, prefer the solution that maintains the initial configuration
+            const { C } = this.mechanism.pivots;
+            if (C) {
+                // Choose solution closest to initial C position
+                validSolutions.sort((a, b) => {
+                    const distA = FourBarLinkageCalculator.distance(a, C);
+                    const distB = FourBarLinkageCalculator.distance(b, C);
+                    return distA - distB;
+                });
+                chosenSolution = validSolutions[0];
+                console.log('[calculateAnimatedStateForAngle] Multiple solutions, chose closest to initial C');
+            } else {
+                chosenSolution = validSolutions[0];
+                console.log('[calculateAnimatedStateForAngle] Multiple solutions, chose first available');
+            }
         }
     }
 
@@ -329,8 +357,8 @@ export class DesignerUI {
     }
 
     getBaseRect() {
-        const boxWidth = 900;
-        const baseHeight = 300;
+        const boxWidth = this.boxDimensions.width;
+        const baseHeight = this.boxDimensions.baseHeight;
         return {
             minX: (this.canvas.width - boxWidth) / 2,
             minY: this.canvas.height - baseHeight - 20,
@@ -415,11 +443,16 @@ export class DesignerUI {
         
         // Helper function to find the limit in one direction using binary search for high precision.
         const findLimit = (direction, startAngle = 0) => {
-            console.log(`[findLimit] Starting search in direction: ${direction} from angle: ${startAngle}`);
+            console.log(`[findLimit] Starting search in direction: ${direction} from angle: ${startAngle}, unlocked: ${this.hingeUnlocked}`);
             let low = startAngle;
             let high = startAngle + Math.PI * 2 * direction;
             let best = startAngle;
             let validFound = false;
+
+            // When unlocked, extend search range to find straight line configuration
+            if (this.hingeUnlocked) {
+                high = startAngle + Math.PI * 4 * direction; // Extend search range
+            }
 
             // Perform binary search for a fixed number of iterations to find the limit with high precision.
             for (let i = 0; i < 100; i++) {
@@ -472,6 +505,26 @@ export class DesignerUI {
         
         console.log(`[calculateAngleLimits] Results: min=${minAngle.toFixed(4)}, max=${maxAngle.toFixed(4)}`);
         this.angleLimits = { min: minAngle, max: maxAngle };
+    }
+
+    setHingeUnlocked(unlocked) {
+        const wasUnlocked = this.hingeUnlocked;
+        this.hingeUnlocked = unlocked;
+        
+        // When switching modes, preserve the current state to maintain continuity
+        if (wasUnlocked !== unlocked && this.animatedState) {
+            // Store the current animated position as the new reference
+            this.lastValidC = this.animatedState.C;
+        }
+        
+        this.calculateAngleLimits();
+        this.updateAndRender();
+    }
+
+    updateBoxDimensions(dimensions) {
+        // Update box dimensions and reset the mechanism to apply changes
+        this.boxDimensions = { ...this.boxDimensions, ...dimensions };
+        this.reset();
     }
 
     hitTest(x, y) {
