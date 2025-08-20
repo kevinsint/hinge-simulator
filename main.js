@@ -13,12 +13,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const baseHeightInput = document.getElementById('baseHeight');
     const lidGapInput = document.getElementById('lidGap');
     
+    // Units toggle controls
+    const mmRadio = document.querySelector('input[name="units"][value="mm"]');
+    const inchesRadio = document.querySelector('input[name="units"][value="inches"]');
+    
+    // Conversion factor: 1 inch = 25.4 mm
+    const MM_PER_INCH = 25.4;
+    let currentUnit = 'mm'; // Default unit is mm
+    
     // Export/Import controls
     const exportButton = document.getElementById('exportConfig');
     const importButton = document.getElementById('importConfig');
     const importFile = document.getElementById('importFile');
 
     let activeSimulator = null;
+    
+    // Track if we're currently updating values to avoid triggering change events
+    let isUpdatingUnits = false;
 
     let lidAngleSliderRef = lidAngleSlider;
     // Track last valid slider percentage (0..100)
@@ -313,9 +324,114 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Units toggle functionality
+    function setupUnitsToggle() {
+        // Set initial state
+        mmRadio.checked = currentUnit === 'mm';
+        inchesRadio.checked = currentUnit === 'inches';
+        
+        // Helper function to convert a value between units
+        function convertValue(value, fromUnit, toUnit) {
+            if (fromUnit === toUnit) return value;
+            
+            if (fromUnit === 'mm' && toUnit === 'inches') {
+                return value / MM_PER_INCH;
+            } else if (fromUnit === 'inches' && toUnit === 'mm') {
+                return value * MM_PER_INCH;
+            }
+            return value;
+        }
+        
+        // Function to update all dimension inputs based on current unit
+        function updateInputsForUnit(newUnit) {
+            if (newUnit === currentUnit) return;
+            
+            isUpdatingUnits = true;
+            
+            // Get current values in pixels (internally stored as mm)
+            const boxWidth = parseFloat(boxWidthInput.value) || 0;
+            const lidHeight = parseFloat(lidHeightInput.value) || 0;
+            const baseHeight = parseFloat(baseHeightInput.value) || 0;
+            const lidGap = parseFloat(lidGapInput.value) || 0;
+            
+            // Convert to new unit
+            boxWidthInput.value = convertValue(boxWidth, currentUnit, newUnit).toFixed(newUnit === 'inches' ? 2 : 0);
+            lidHeightInput.value = convertValue(lidHeight, currentUnit, newUnit).toFixed(newUnit === 'inches' ? 2 : 0);
+            baseHeightInput.value = convertValue(baseHeight, currentUnit, newUnit).toFixed(newUnit === 'inches' ? 2 : 0);
+            lidGapInput.value = convertValue(lidGap, currentUnit, newUnit).toFixed(newUnit === 'inches' ? 2 : 0);
+            
+            // Update labels and input properties
+            const unitSuffix = newUnit === 'mm' ? 'mm' : 'in';
+            document.querySelectorAll('.slider-group label').forEach(label => {
+                const text = label.textContent;
+                if (text.includes('(mm):') || text.includes('(in):')) {
+                    label.textContent = text.replace(/\((mm|in)\):/, `(${unitSuffix}):`);
+                }
+            });
+            
+            // Update step and precision for each input based on unit
+            [boxWidthInput, lidHeightInput, baseHeightInput, lidGapInput].forEach(input => {
+                if (newUnit === 'inches') {
+                    input.step = '0.1';
+                    input.min = '0.1';
+                } else {
+                    input.step = '1';
+                    input.min = '1';
+                }
+            });
+            
+            currentUnit = newUnit;
+            isUpdatingUnits = false;
+        }
+        
+        // Add event listeners to radio buttons
+        mmRadio.addEventListener('change', () => {
+            if (mmRadio.checked) updateInputsForUnit('mm');
+        });
+        
+        inchesRadio.addEventListener('change', () => {
+            if (inchesRadio.checked) updateInputsForUnit('inches');
+        });
+        
+        // Initialize labels
+        updateInputsForUnit('mm');
+    }
+    
+    // Add event listeners for dimension inputs to handle updates correctly
+    function setupDimensionInputs() {
+        const dimensionInputs = [boxWidthInput, lidHeightInput, baseHeightInput, lidGapInput];
+        
+        dimensionInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if (isUpdatingUnits) return;
+                
+                // Convert back to mm for internal use
+                let value = parseFloat(input.value) || 0;
+                if (currentUnit === 'inches') {
+                    value = value * MM_PER_INCH;
+                }
+                
+                // Only update dimensions when actively changed by user (not during unit conversion)
+                if (activeSimulator && typeof activeSimulator.updateBoxDimensions === 'function') {
+                    const dimensions = {};
+                    if (input === boxWidthInput) dimensions.width = value;
+                    if (input === lidHeightInput) dimensions.lidHeight = value;
+                    if (input === baseHeightInput) dimensions.baseHeight = value;
+                    if (input === lidGapInput) dimensions.lidGap = value;
+                    
+                    activeSimulator.updateBoxDimensions(dimensions);
+                }
+            });
+        });
+    }
+    
     console.log('Initializing application with DesignerUI');
     // Initialize with design mode
     switchMode();
+    
+    // Setup units toggle and dimension inputs after simulator is initialized
+    setupUnitsToggle();
+    setupDimensionInputs();
     
     // Double-check if slider is properly initialized
     setTimeout(() => {

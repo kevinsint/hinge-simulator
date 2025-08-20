@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="deployment-version" content="v2025-07-28-0930">
     <title>Hinge Simulator</title>
     <style>
         body {
@@ -135,6 +136,18 @@
             border-radius: 3px;
             font-size: 12px;
         }
+        .units-toggle {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .units-toggle label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -148,29 +161,30 @@
                 <div class="control-section">
                     <h3>Box Dimensions</h3>
                     <div class="slider-group">
-                        <label for="boxWidth">Box Width (px):</label>
-                        <input type="number" id="boxWidth" value="900" step="1">
+                        <label for="boxWidth">Box Width (mm):</label>
+                        <input type="number" id="boxWidth" value="450" step="1">
                     </div>
                     <div class="slider-group">
-                        <label for="lidHeight">Lid Height (px):</label>
+                        <label for="lidHeight">Lid Height (mm):</label>
                         <input type="number" id="lidHeight" value="100" step="1">
                     </div>
                     <div class="slider-group">
-                        <label for="baseHeight">Base Height (px):</label>
+                        <label for="baseHeight">Base Height (mm):</label>
                         <input type="number" id="baseHeight" value="300" step="1">
                     </div>
                     <div class="slider-group">
-                        <label for="lidGap">Gap Between Lid & Base (px):</label>
+                        <label for="lidGap">Gap Between Lid & Base (mm):</label>
                         <input type="number" id="lidGap" value="20" step="1">
                     </div>
                 </div>
 
                 <div class="control-section">
-                    <h3>Controls</h3>
-                    <button id="resetPositions">Reset Design</button>
-                    <button id="exportConfig">Export Configuration</button>
-                    <input type="file" id="importFile" accept=".json" style="display: none;">
-                    <button id="importConfig">Import Configuration</button>
+                    <h3>Configuration</h3>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="file" id="importFile" accept=".json" style="display: none;">
+                        <button id="importConfig">Import</button>
+                        <button id="exportConfig">Export</button>
+                    </div>
                 </div>
 
                 <div class="control-section">
@@ -192,7 +206,6 @@
                 <div class="control-section" id="designControls" style="display: none;">
                     <h3>Mechanism Design</h3>
                     <div class="slider-group">
-                        <button id="resetPositions">Reset Design</button>
                         <div class="status-indicator" id="statusIndicator"></div>
                     </div>
                     <div id="animationControl" class="slider-group" style="display: none;">
@@ -200,7 +213,27 @@
                     </div>
                 </div>
 
+                <!-- Units toggle option at the bottom of controls -->
+                <div class="control-section">
+                    <h3>Display Units</h3>
+                    <div class="units-toggle">
+                        <label>
+                            <input type="radio" name="units" value="mm" checked>
+                            Millimeters (mm)
+                        </label>
+                        <label>
+                            <input type="radio" name="units" value="inches">
+                            Inches (in)
+                        </label>
+                    </div>
+                </div>
+
             </div>
+                <!-- Deployment version info -->
+    <footer style="text-align:center; margin-top:2em; color:#888; font-size:14px;">
+        Cross Hinge Simulator – v2025-07-28-0930
+    </footer>
+    
         </div>
         
         <div class="canvas-container">
@@ -233,10 +266,6 @@
 
     <!-- Import main module only; it imports DesignerUI internally -->
     <script type="module" src="main.js" defer></script>
-    <!-- Deployment version info -->
-    <footer style="text-align:center; margin-top:2em; color:#888; font-size:14px;">
-        Cross Hinge Simulator – v2025-07-28-0930
-    </footer>
-    <meta name="deployment-version" content="v2025-07-28-0930">
+
 </body>
 </html>
