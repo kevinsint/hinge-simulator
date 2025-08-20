@@ -534,9 +534,83 @@ export class DesignerUI {
     }
 
     updateBoxDimensions(dimensions) {
-        // Update box dimensions and reset the mechanism to apply changes
+        // Store relative positions of current pivots before updating dimensions
+        const relativePivots = this.getRelativePivotPositions();
+        const oldBaseRect = this.getBaseRect();
+        const oldLidBottom = oldBaseRect.minY - this.boxDimensions.lidGap;
+        
+        // Update box dimensions
+        const oldDimensions = { ...this.boxDimensions };
         this.boxDimensions = { ...this.boxDimensions, ...dimensions };
-        this.reset();
+        
+        // Calculate new base rect with updated dimensions
+        const newBaseRect = this.getBaseRect();
+        const newLidBottom = newBaseRect.minY - this.boxDimensions.lidGap;
+        
+        // Only update pivot positions if they exist
+        if (this.mechanism.pivots.A && this.mechanism.pivots.B && 
+            this.mechanism.pivots.C && this.mechanism.pivots.D) {
+            
+            // Update base pivots (A and D) - maintain their relative position to base
+            this.mechanism.pivots.A = {
+                x: newBaseRect.minX + relativePivots.A.x,
+                y: newBaseRect.minY + relativePivots.A.y
+            };
+            
+            this.mechanism.pivots.D = {
+                x: newBaseRect.minX + relativePivots.D.x,
+                y: newBaseRect.minY + relativePivots.D.y
+            };
+            
+            // Update lid pivots (B and C) - maintain their relative position to lid
+            this.mechanism.pivots.B = {
+                x: newBaseRect.minX + relativePivots.B.x,
+                y: newLidBottom - relativePivots.B.y
+            };
+            
+            this.mechanism.pivots.C = {
+                x: newBaseRect.minX + relativePivots.C.x,
+                y: newLidBottom - relativePivots.C.y
+            };
+            
+            // Update lid properties
+            this.lidHeight = this.boxDimensions.lidHeight;
+            this.lidDelta = this.boxDimensions.lidGap;
+            this.lidWidth = newBaseRect.maxX - newBaseRect.minX;
+            
+            const lidCenterX = (newBaseRect.minX + newBaseRect.maxX) / 2;
+            const lidCenterY = newBaseRect.minY - (this.lidHeight / 2) - this.lidDelta;
+            this.initialLidTransform = {
+                center: { x: lidCenterX, y: lidCenterY },
+                angle: 0
+            };
+            
+            // Update pivot offsets
+            this.pivotOffsets = {
+                B: { 
+                    x: this.mechanism.pivots.B.x - this.initialLidTransform.center.x, 
+                    y: this.mechanism.pivots.B.y - this.initialLidTransform.center.y 
+                },
+                C: { 
+                    x: this.mechanism.pivots.C.x - this.initialLidTransform.center.x, 
+                    y: this.mechanism.pivots.C.y - this.initialLidTransform.center.y 
+                }
+            };
+            
+            // Update initial pivots and state variables
+            this.initialPivots = JSON.parse(JSON.stringify(this.mechanism.pivots));
+            const { A, B } = this.mechanism.pivots;
+            this.initialInputAngle = Math.atan2(B.y - A.y, B.x - A.x);
+            this.storeInitialOrientations();
+            this.lastValidC = this.mechanism.pivots.C;
+            this.calculateAngleLimits();
+            
+            // Update rendering
+            this.updateAndRender();
+        } else {
+            // If pivots are not yet initialized, do a full reset
+            this.reset();
+        }
     }
 
     getConfiguration() {
