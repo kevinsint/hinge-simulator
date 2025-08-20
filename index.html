@@ -7,16 +7,49 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 20px;
-            max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 10px;
+            max-width: 100%;
+        }
+        h1 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+        .app-container {
+            display: flex;
+            flex-direction: row;
+            gap: 15px;
+            height: calc(100vh - 80px);
+            overflow: hidden;
+        }
+        .controls-container {
+            width: 280px;
+            flex-shrink: 0;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        .canvas-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
         .controls {
-            margin-bottom: 20px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .control-section {
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        .control-section h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 16px;
         }
         .slider-group {
             margin: 10px 0;
@@ -39,14 +72,14 @@
             border: 1px solid #ccc;
             background-color: #f9f9f9;
             display: block;
-            margin: 20px auto;
         }
         .info-box {
-            margin-top: 20px;
-            padding: 15px;
+            margin-top: 10px;
+            padding: 12px;
             background-color: #f0f8ff;
             border: 1px solid #ddd;
             border-radius: 5px;
+            font-size: 14px;
         }
         .info-box h3 {
             margin-top: 0;
@@ -72,14 +105,15 @@
             color: #721c24;
         }
         button {
-            padding: 8px 16px;
-            margin: 5px 0;
+            padding: 8px 12px;
+            margin: 3px 0;
             background-color: #007bff;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
+            width: 100%;
         }
         button:hover {
             background-color: #0056b3;
@@ -106,90 +140,95 @@
 <body>
     <h1>Cross Hinge Simulator</h1>
     
-    <div class="controls">
+    <div class="app-container">
+        <div class="controls-container">
+            <div class="controls">
 
         
-        <div class="control-section">
-            <h3>Box Dimensions</h3>
-            <div class="slider-group">
-                <label for="boxWidth">Box Width (px):</label>
-                <input type="number" id="boxWidth" value="900" step="1">
-            </div>
-            <div class="slider-group">
-                <label for="lidHeight">Lid Height (px):</label>
-                <input type="number" id="lidHeight" value="100" step="1">
-            </div>
-            <div class="slider-group">
-                <label for="baseHeight">Base Height (px):</label>
-                <input type="number" id="baseHeight" value="300" step="1">
-            </div>
-            <div class="slider-group">
-                <label for="lidGap">Gap Between Lid & Base (px):</label>
-                <input type="number" id="lidGap" value="20" step="1">
-            </div>
-        </div>
+                <div class="control-section">
+                    <h3>Box Dimensions</h3>
+                    <div class="slider-group">
+                        <label for="boxWidth">Box Width (px):</label>
+                        <input type="number" id="boxWidth" value="900" step="1">
+                    </div>
+                    <div class="slider-group">
+                        <label for="lidHeight">Lid Height (px):</label>
+                        <input type="number" id="lidHeight" value="100" step="1">
+                    </div>
+                    <div class="slider-group">
+                        <label for="baseHeight">Base Height (px):</label>
+                        <input type="number" id="baseHeight" value="300" step="1">
+                    </div>
+                    <div class="slider-group">
+                        <label for="lidGap">Gap Between Lid & Base (px):</label>
+                        <input type="number" id="lidGap" value="20" step="1">
+                    </div>
+                </div>
 
-        <div class="control-section">
-            <h3>Controls</h3>
-            <button id="resetPositions">Reset Design</button>
-            <button id="exportConfig">Export Configuration</button>
-            <input type="file" id="importFile" accept=".json" style="display: none;">
-            <button id="importConfig">Import Configuration</button>
-        </div>
+                <div class="control-section">
+                    <h3>Controls</h3>
+                    <button id="resetPositions">Reset Design</button>
+                    <button id="exportConfig">Export Configuration</button>
+                    <input type="file" id="importFile" accept=".json" style="display: none;">
+                    <button id="importConfig">Import Configuration</button>
+                </div>
 
-        <div class="control-section">
-            <h3>Animation</h3>
-            <div class="slider-group">
-                <label for="lidAngle">Lid Angle (°):</label>
-                <input type="range" id="lidAngle" min="0" max="180" value="0">
-                <span id="lidAngleValue">0</span>
+                <div class="control-section">
+                    <h3>Animation</h3>
+                    <div class="slider-group">
+                        <label for="lidAngle">Lid Angle (°):</label>
+                        <input type="range" id="lidAngle" min="0" max="180" value="0">
+                        <span id="lidAngleValue">0</span>
+                    </div>
+                    <div class="slider-group">
+                        <label>
+                            <input type="checkbox" id="unlockHinge" style="margin-right: 8px;">
+                            Unlock hinge (allow straight line B-C-D)
+                        </label>
+                    </div>
+                    <div id="angleLimitsStatus" style="margin-top:8px; color:#555; font-size:14px;"></div>
+                </div>
+        
+                <div class="control-section" id="designControls" style="display: none;">
+                    <h3>Mechanism Design</h3>
+                    <div class="slider-group">
+                        <button id="resetPositions">Reset Design</button>
+                        <div class="status-indicator" id="statusIndicator"></div>
+                    </div>
+                    <div id="animationControl" class="slider-group" style="display: none;">
+                        <!-- Animation slider hidden, use lidAngle instead -->
+                    </div>
+                </div>
+
             </div>
-            <div class="slider-group">
-                <label>
-                    <input type="checkbox" id="unlockHinge" style="margin-right: 8px;">
-                    Unlock hinge (allow straight line B-C-D)
-                </label>
-            </div>
-            <div id="angleLimitsStatus" style="margin-top:8px; color:#555; font-size:14px;"></div>
         </div>
         
-        <div class="control-section" id="designControls" style="display: none;">
-            <h3>Mechanism Design</h3>
-            <div class="slider-group">
-                <button id="resetPositions">Reset Design</button>
-                <div class="status-indicator" id="statusIndicator"></div>
+        <div class="canvas-container">
+            <canvas id="hingeCanvas" width="1125" height="750"></canvas>
+
+            <div class="info-box">
+                <h3>Design Analysis</h3>
+                <div id="analysisText">Analyzing hinge configuration...</div>
+                <div id="statusIndicator" class="status-indicator status-good">Configuration Valid</div>
+                
+                <h3>Pivot Positions</h3>
+                <div id="pivotPositions" style="font-family: monospace; font-size: 12px;">
+                    <div><strong>Base Pivots (relative to box left, base top):</strong></div>
+                    <div>A: <span id="pivotA">x: 0, y: 0</span></div>
+                    <div>D: <span id="pivotD">x: 0, y: 0</span></div>
+                    <div><strong>Lid Pivots (relative to box left, lid bottom):</strong></div>
+                    <div>B: <span id="pivotB">x: 0, y: 0</span></div>
+                    <div>C: <span id="pivotC">x: 0, y: 0</span></div>
+                </div>
+                
+                <h3>Link Legend</h3>
+                <ul style="list-style-type: none; padding-left: 0;">
+                    <li><span style="color:red; font-weight:bold;">■</span> <strong>Input Link (A-B):</strong> The red bar.</li>
+                    <li><span style="color:blue; font-weight:bold;">■</span> <strong>Output Link (D-C):</strong> The blue bar.</li>
+                    <li><span style="color:green; font-weight:bold;">■</span> <strong>Coupler Link (B-C):</strong> The green bar (the lid).</li>
+                    <li><strong>Ground Link (A-D):</strong> The fixed base of the box.</li>
+                </ul>
             </div>
-            <div id="animationControl" class="slider-group" style="display: none;">
-                <!-- Animation slider hidden, use lidAngle instead -->
-            </div>
-        </div>
-
-    </div>
-
-    <canvas id="hingeCanvas" width="1125" height="750"></canvas>
-
-    <div class="info-box">
-        <h3>Design Analysis</h3>
-        <div id="analysisText">Analyzing hinge configuration...</div>
-        <div id="statusIndicator" class="status-indicator status-good">Configuration Valid</div>
-        
-        <h3>Pivot Positions</h3>
-        <div id="pivotPositions" style="font-family: monospace; font-size: 12px;">
-            <div><strong>Base Pivots (relative to box left, base top):</strong></div>
-            <div>A: <span id="pivotA">x: 0, y: 0</span></div>
-            <div>D: <span id="pivotD">x: 0, y: 0</span></div>
-            <div><strong>Lid Pivots (relative to box left, lid bottom):</strong></div>
-            <div>B: <span id="pivotB">x: 0, y: 0</span></div>
-            <div>C: <span id="pivotC">x: 0, y: 0</span></div>
-        </div>
-        
-        <h3>Link Legend</h3>
-        <ul style="list-style-type: none; padding-left: 0;">
-            <li><span style="color:red; font-weight:bold;">■</span> <strong>Input Link (A-B):</strong> The red bar.</li>
-            <li><span style="color:blue; font-weight:bold;">■</span> <strong>Output Link (D-C):</strong> The blue bar.</li>
-            <li><span style="color:green; font-weight:bold;">■</span> <strong>Coupler Link (B-C):</strong> The green bar (the lid).</li>
-            <li><strong>Ground Link (A-D):</strong> The fixed base of the box.</li>
-        </ul>
     </div>
 
     <!-- Import main module only; it imports DesignerUI internally -->

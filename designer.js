@@ -370,8 +370,13 @@ export class DesignerUI {
 
     handleMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        // Calculate scaling factors to account for CSS resizing
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        // Apply scaling to get correct canvas coordinates
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        
         const hitResult = this.hitTest(x, y);
 
         if (hitResult.hit) {
@@ -379,7 +384,9 @@ export class DesignerUI {
                 isDragging: true,
                 pivotName: hitResult.pivotName,
                 startX: x,
-                startY: y
+                startY: y,
+                scaleX: scaleX,
+                scaleY: scaleY
             };
             this.canvas.style.cursor = 'grabbing';
         }
@@ -388,8 +395,12 @@ export class DesignerUI {
     handleMouseMove(e) {
         if (!this.dragState.isDragging) return;
         const rect = this.canvas.getBoundingClientRect();
-        let x = e.clientX - rect.left;
-        let y = e.clientY - rect.top;
+        // Use scaling factors stored during mousedown to maintain consistency
+        const scaleX = this.dragState.scaleX || this.canvas.width / rect.width;
+        const scaleY = this.dragState.scaleY || this.canvas.height / rect.height;
+        // Apply scaling to get correct canvas coordinates
+        let x = (e.clientX - rect.left) * scaleX;
+        let y = (e.clientY - rect.top) * scaleY;
         const { pivotName } = this.dragState;
 
         if (pivotName === 'A' || pivotName === 'D') {
