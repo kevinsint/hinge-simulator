@@ -320,6 +320,8 @@ document.addEventListener('DOMContentLoaded', () => {
         importFile.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 importConfiguration(e.target.files[0]);
+                // Reset the file input value after processing to allow reimporting the same file
+                e.target.value = '';
             }
         });
     }
