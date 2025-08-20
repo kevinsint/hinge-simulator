@@ -61,6 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
             let pct = Math.max(0, Math.min(100, targetPct));
             if (isValidPct(pct)) {
                 activeSimulator.lastValidC = savedLastValidC; // restore
+                // Store last valid percentage when we have a valid position
+                lastValidPct = pct;
                 return Math.round(pct);
             }
             let lo = Math.min(pct, lastValidPct);
@@ -82,7 +84,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (Math.abs(right - left) < 0.01) break;
             }
             activeSimulator.lastValidC = savedLastValidC;
-            return Math.round(left);
+            // Store the result as the new lastValidPct
+            lastValidPct = Math.round(left);
+            return lastValidPct;
         };
 
         lidAngleSliderRef.addEventListener('input', () => {
@@ -104,13 +108,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Interpret slider value as percentage 0..100 and clamp to nearest valid
                 let pct = Number(lidAngleSliderRef.value);
                 if (Number.isNaN(pct)) pct = lastValidPct;
-                pct = clampToValidPct(pct);
-                lidAngleSliderRef.value = String(pct);
-                const angleOffset = pctToAngle(pct);
+                
+                // Clamp to nearest valid percentage
+                const clampedPct = clampToValidPct(pct);
+                
+                // Update the slider to reflect the valid position
+                lidAngleSliderRef.value = String(clampedPct);
+                
+                // Calculate and apply the angle offset
+                const angleOffset = pctToAngle(clampedPct);
                 console.log(`[Slider Event] Calculated angleOffset for DesignerUI (clamped): ${angleOffset}`);
                 activeSimulator.animate(angleOffset);
                 lidAngleValue.textContent = `${(angleOffset * 180 / Math.PI).toFixed(0)}°`;
-                if (activeSimulator.animatedState) lastValidPct = pct;
+                // Don't update lastValidPct here since it's already updated in clampToValidPct
             } else {
                 // Use direct radian value for simulation mode
                 const angleInRadians = (Number(lidAngleSliderRef.value) / 100) * Math.PI; // 0..100 -> 0..π
