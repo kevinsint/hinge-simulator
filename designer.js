@@ -98,6 +98,7 @@ export class DesignerUI {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         const baseRect = this.getBaseRect();
         this.drawBoxBase(this.ctx, baseRect);
+        this.drawBottomLeftCornerPath();
 
         const isAnimated = this.animatedState && this.lastResult && this.lastResult.isValid;
         const pivotsToDraw = isAnimated ? this.animatedState : this.mechanism.pivots;
@@ -185,6 +186,130 @@ export class DesignerUI {
         this.ctx.strokeStyle = 'rgba(100, 100, 100, 0.8)';
         this.ctx.lineWidth = 3;
         this.ctx.stroke();
+    }
+
+    drawBottomLeftCornerPath() {
+        // Determine the angle range. If min === max, there's no motion to draw.
+        const min = (this.angleLimits && Number.isFinite(this.angleLimits.min)) ? this.angleLimits.min : 0;
+        const max = (this.angleLimits && Number.isFinite(this.angleLimits.max)) ? this.angleLimits.max : 0;
+        if (min === max) return;
+
+        // Use initial pivots for the reference transform
+        const pivots0 = this.initialPivots || this.mechanism.pivots;
+        if (!pivots0 || !pivots0.B || !pivots0.C) return;
+        const { B: B0, C: C0 } = pivots0;
+
+        // Bottom corners of the lid in the initial (closed) pose
+        const initialCornerBL = {
+            x: this.initialLidTransform.center.x - this.lidWidth / 2,
+            y: this.initialLidTransform.center.y + this.lidHeight / 2
+        };
+        const initialCornerBR = {
+            x: this.initialLidTransform.center.x + this.lidWidth / 2,
+            y: this.initialLidTransform.center.y + this.lidHeight / 2
+        };
+
+        // Adaptive resolution: more samples for larger spans, clamped for perf
+        const degSpan = Math.abs((max - min) * 180 / Math.PI);
+        const samples = Math.max(120, Math.min(720, Math.round(degSpan * 3)));
+        const leftPoints = [];
+        const rightPoints = [];
+
+        // Preserve continuity state affected by calculateAnimatedStateForAngle
+        const savedLastValidC = this.lastValidC;
+
+        for (let i = 0; i <= samples; i++) {
+            const t = i / samples;
+            const angle = min + t * (max - min);
+            const state = this.calculateAnimatedStateForAngle(angle);
+            if (state) {
+                const tr = FourBarLinkageCalculator.getTransform(B0, C0, state.B, state.C);
+                leftPoints.push(FourBarLinkageCalculator.applyTransform(initialCornerBL, tr));
+                rightPoints.push(FourBarLinkageCalculator.applyTransform(initialCornerBR, tr));
+            } else {
+                // Mark a gap to avoid drawing straight segments across invalid regions
+                leftPoints.push(null);
+                rightPoints.push(null);
+            }
+        }
+
+        // Restore last valid C to avoid impacting interactive continuity
+        this.lastValidC = savedLastValidC;
+
+        // Helpers: split into contiguous segments (skip nulls)
+        const splitSegments = (pts) => {
+            const segs = [];
+            let seg = [];
+            for (let i = 0; i < pts.length; i++) {
+                const p = pts[i];
+                if (p) {
+                    seg.push(p);
+                } else {
+                    if (seg.length >= 2) segs.push(seg);
+                    seg = [];
+                }
+            }
+            if (seg.length >= 2) segs.push(seg);
+            return segs;
+        };
+
+        // Smooth stroke using Catmull-Rom -> cubic Bezier per contiguous segment
+        const strokeSmooth = (segment, strokeStyle) => {
+            // Remove near-duplicate points to avoid visual kinks
+            const simplify = (pts, eps = 0.25) => {
+                if (!pts || pts.length === 0) return [];
+                const out = [pts[0]];
+                for (let i = 1; i < pts.length; i++) {
+                    const a = out[out.length - 1];
+                    const b = pts[i];
+                    const dx = b.x - a.x, dy = b.y - a.y;
+                    if ((dx * dx + dy * dy) > eps * eps) out.push(b);
+                }
+                return out;
+            };
+
+            const seg = simplify(segment);
+            if (seg.length < 2) return;
+
+            this.ctx.save();
+            this.ctx.strokeStyle = strokeStyle;
+            this.ctx.lineWidth = 2;
+            this.ctx.lineJoin = 'round';
+            this.ctx.lineCap = 'round';
+            this.ctx.setLineDash([5, 4]);
+
+            if (seg.length === 2) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(seg[0].x, seg[0].y);
+                this.ctx.lineTo(seg[1].x, seg[1].y);
+                this.ctx.stroke();
+                this.ctx.restore();
+                return;
+            }
+
+            this.ctx.beginPath();
+            this.ctx.moveTo(seg[0].x, seg[0].y);
+            for (let i = 0; i < seg.length - 1; i++) {
+                const p0 = i === 0 ? seg[0] : seg[i - 1];
+                const p1 = seg[i];
+                const p2 = seg[i + 1];
+                const p3 = i + 2 < seg.length ? seg[i + 2] : seg[i + 1];
+                // Catmull-Rom to Bezier (uniform, tension=1)
+                const c1x = p1.x + (p2.x - p0.x) / 6;
+                const c1y = p1.y + (p2.y - p0.y) / 6;
+                const c2x = p2.x - (p3.x - p1.x) / 6;
+                const c2y = p2.y - (p3.y - p1.y) / 6;
+                this.ctx.bezierCurveTo(c1x, c1y, c2x, c2y, p2.x, p2.y);
+            }
+            this.ctx.stroke();
+            this.ctx.restore();
+        };
+
+        const leftSegs = splitSegments(leftPoints);
+        const rightSegs = splitSegments(rightPoints);
+        const strokeStyle = 'rgba(255, 140, 0, 0.9)';
+        for (const s of leftSegs) strokeSmooth(s, strokeStyle);
+        for (const s of rightSegs) strokeSmooth(s, strokeStyle);
     }
 
     animate(angleOffset) {
