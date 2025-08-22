@@ -28,6 +28,9 @@ export class DesignerUI {
             lidGap: 100
         };
 
+        // Throttle helper timestamp for live angle limit recomputation while dragging
+        this._lastAngleLimitUpdate = 0;
+
         // Configurable pivot placement as percentages within base/lid
         // Values in [0,1]; baseY measured from baseRect.minY (top of base), lidY from lid top
         this.pivotPlacement = {
@@ -685,6 +688,21 @@ export class DesignerUI {
         }
 
         this.mechanism.pivots[pivotName] = { x, y };
+        // Keep all derived references in sync during dragging so motion path is correct
+        // 1) Use current pivots as the reference pose for transforms
+        this.initialPivots = JSON.parse(JSON.stringify(this.mechanism.pivots));
+        // 2) Update the input angle and orientations for animation math
+        const { A, B } = this.mechanism.pivots;
+        this.initialInputAngle = Math.atan2(B.y - A.y, B.x - A.x);
+        this.storeInitialOrientations();
+        // 3) Update continuity anchor
+        this.lastValidC = this.mechanism.pivots.C;
+        // 4) Throttle angle limit recomputation to avoid jank while dragging
+        const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        if (!this._lastAngleLimitUpdate || (now - this._lastAngleLimitUpdate) > 60) {
+            this.calculateAngleLimits();
+            this._lastAngleLimitUpdate = now;
+        }
         this.updateAndRender();
     }
 
