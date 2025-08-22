@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const angleOffset = pctToAngle(clampedPct);
                 console.log(`[Slider Event] Calculated angleOffset for DesignerUI (clamped): ${angleOffset}`);
                 activeSimulator.animate(angleOffset);
-                lidAngleValue.textContent = `${(angleOffset * 180 / Math.PI).toFixed(0)}°`;
+                lidAngleValue.textContent = `${(Math.abs(angleOffset) * 180 / Math.PI).toFixed(0)}°`;
                 // Don't update lastValidPct here since it's already updated in clampToValidPct
             } else {
                 // Use direct radian value for simulation mode
@@ -137,6 +137,29 @@ document.addEventListener('DOMContentLoaded', () => {
         lidAngleSliderRef.dispatchEvent(event);
     }
 
+    // Convert a desired angle (radians, relative offset) to slider percentage [0..100]
+    function angleToPct(angleRad) {
+        if (!activeSimulator || !activeSimulator.angleLimits) return 0;
+        const min = activeSimulator.angleLimits.min;
+        const max = activeSimulator.angleLimits.max;
+        const span = max - min;
+        if (!Number.isFinite(min) || !Number.isFinite(max) || Math.abs(span) < 1e-9) return 0;
+        const pct = ((angleRad - min) / span) * 100;
+        return Math.round(Math.max(0, Math.min(100, pct)));
+    }
+
+    // Set the slider to represent a specific angle (in radians) without assuming it's at the left end
+    function setSliderToAngle(angleRad, { dispatch = false } = {}) {
+        const pct = angleToPct(angleRad);
+        lastValidPct = pct;
+        lidAngleSliderRef.value = String(pct);
+        lidAngleValue.textContent = `${(Math.abs(angleRad) * 180 / Math.PI).toFixed(0)}°`;
+        if (dispatch) {
+            const ev = new Event('input');
+            lidAngleSliderRef.dispatchEvent(ev);
+        }
+    }
+
     function switchMode(mode = 'design') {
         if (activeSimulator && typeof activeSimulator.destroy === 'function') {
             activeSimulator.destroy();
@@ -148,19 +171,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const minDeg = (activeSimulator.angleLimits.min * 180 / Math.PI).toFixed(1);
             const maxDeg = (activeSimulator.angleLimits.max * 180 / Math.PI).toFixed(1);
-            const validRange = activeSimulator.angleLimits.max > activeSimulator.angleLimits.min;
+            const openDeg = Math.abs((activeSimulator.angleLimits.max - activeSimulator.angleLimits.min) * 180 / Math.PI).toFixed(1);
+            const validRange = activeSimulator.angleLimits.max !== activeSimulator.angleLimits.min;
             const statusDiv = document.getElementById('angleLimitsStatus');
 
             if (statusDiv) {
-                statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is ${validRange ? 'animatable' : 'locked'}.`;
+                statusDiv.textContent = `Open limit: ${openDeg}° — linkage is ${validRange ? 'animatable' : 'locked'}.`;
             }
 
             // Handle one-shot UI events from DesignerUI
             if (result && result.uiEvent && result.uiEvent.type === 'resetAngle') {
-                // Reset slider without dispatching input (avoid triggering animate)
-                lastValidPct = 0;
-                lidAngleSliderRef.value = '0';
-                lidAngleValue.textContent = '0°';
+                // Reset slider to represent 0 rad (closed) within the current [min..max] without dispatching input
+                setSliderToAngle(0, { dispatch: false });
             }
 
             // Update pivot positions if available
@@ -188,13 +210,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 activeSimulator.reset();
             }
 
-            // Set slider to the minimum position (lid closed) upon initialization.
-            lastValidPct = 0;
-            lidAngleSliderRef.value = String(lastValidPct);
-
-            // Trigger a slider input event to apply the initial state.
-            const event = new Event('input');
-            lidAngleSliderRef.dispatchEvent(event);
+            // Position slider so that 0 rad (closed) maps to its correct percentage and apply state
+            setSliderToAngle(0, { dispatch: true });
         }
         
         // Always (re-)attach the slider listener after switching mode
@@ -208,13 +225,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('Hinge unlock state changed:', unlockHingeCheckbox.checked);
                 activeSimulator.setHingeUnlocked(unlockHingeCheckbox.checked);
                 
-                // Reset slider to minimum position when toggling unlock state
-                lastValidPct = 0;
-                lidAngleSliderRef.value = '0';
-                
-                // Trigger slider update to recalculate limits and position
-                const event = new Event('input');
-                lidAngleSliderRef.dispatchEvent(event);
+                // Reset slider to represent 0 rad (closed) with new [min..max]
+                setSliderToAngle(0, { dispatch: true });
             }
         });
     }
@@ -230,13 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     dimensions[dimensionKey] = value;
                     activeSimulator.updateBoxDimensions(dimensions);
                     
-                    // Reset animation state after dimension change
-                    lastValidPct = 0;
-                    lidAngleSliderRef.value = '0';
-                    
-                    // Trigger slider update to recalculate limits
-                    const event = new Event('input');
-                    lidAngleSliderRef.dispatchEvent(event);
+                    // Reset animation state after dimension change: reposition to 0 rad
+                    setSliderToAngle(0, { dispatch: true });
                 }
             });
         }
@@ -311,12 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 // Reset animation state
-                lastValidPct = 0;
-                lidAngleSliderRef.value = '0';
-                
-                // Trigger slider update to recalculate limits
-                const event = new Event('input');
-                lidAngleSliderRef.dispatchEvent(event);
+                setSliderToAngle(0, { dispatch: true });
                 
                 console.log('Configuration imported successfully');
             } catch (error) {

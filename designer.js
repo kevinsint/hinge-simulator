@@ -754,6 +754,9 @@ export class DesignerUI {
         console.log('[calculateAngleLimits] Current mechanism:', this.mechanism);
         console.log('[calculateAngleLimits] Initial input angle:', this.initialInputAngle);
         
+        // Preserve continuity anchor while probing limits
+        const savedLastValidC_global = this.lastValidC;
+
         // Helper function to find the limit in one direction using binary search for high precision.
         const findLimit = (direction, startAngle = 0) => {
             console.log(`[findLimit] Starting search in direction: ${direction} from angle: ${startAngle}, unlocked: ${this.hingeUnlocked}`);
@@ -805,19 +808,40 @@ export class DesignerUI {
             return best;
         };
 
-        // Min position: lid closed (starting position = 0 offset)
-        const minAngle = 0;
-        
-        // Max position: find the maximum angle in both positive and negative directions
-        // and use the one with the larger absolute value to get the full range
+        // Probe both directions; choose the one that yields greater vertical clearance of lid bottom from base top (visual 'opening')
         const maxPositive = findLimit(1, 0);
         const maxNegative = findLimit(-1, 0);
-        
-        // Choose the direction that gives us the larger range
-        const maxAngle = Math.abs(maxPositive) > Math.abs(maxNegative) ? maxPositive : maxNegative;
-        
-        console.log(`[calculateAngleLimits] Results: min=${minAngle.toFixed(4)}, max=${maxAngle.toFixed(4)}`);
+
+        const baseRectForEval = this.getBaseRect();
+        const { B: B0, C: C0 } = this.initialPivots || this.mechanism.pivots;
+        const bottomCenterLocal = { x: 0, y: this.lidHeight / 2 };
+
+        const clearanceAt = (angle) => {
+            if (!Number.isFinite(angle) || angle === 0) return 0;
+            const state = this.calculateAnimatedStateForAngle(angle);
+            if (!state || !B0 || !C0) return -Infinity;
+            const tr = FourBarLinkageCalculator.getTransform(B0, C0, state.B, state.C);
+            const bottomCenterWorld = FourBarLinkageCalculator.applyTransform({
+                x: this.initialLidTransform.center.x + bottomCenterLocal.x,
+                y: this.initialLidTransform.center.y + bottomCenterLocal.y
+            }, tr);
+            // Canvas Y grows downward; larger positive value means bottom edge is farther above base top
+            const clearance = baseRectForEval.minY - bottomCenterWorld.y;
+            return clearance;
+        };
+
+        const clearancePos = clearanceAt(maxPositive);
+        const clearanceNeg = clearanceAt(maxNegative);
+        const openingLimit = clearancePos >= clearanceNeg ? maxPositive : maxNegative;
+
+        const minAngle = 0;
+        const maxAngle = openingLimit;
+
+        console.log(`[calculateAngleLimits] Results (closed->open by-clearance): min=${minAngle.toFixed(4)}, max=${maxAngle.toFixed(4)}, clearPos=${clearancePos.toFixed(2)}, clearNeg=${clearanceNeg.toFixed(2)}`);
         this.angleLimits = { min: minAngle, max: maxAngle };
+
+        // Restore continuity anchor
+        this.lastValidC = savedLastValidC_global;
     }
 
     setHingeUnlocked(unlocked) {
