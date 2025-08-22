@@ -16,6 +16,10 @@ export class DesignerUI {
         this.lastValidC = null;
         this.hingeUnlocked = false;
         
+        // View transform (world -> screen)
+        this.view = { scale: 1, offsetX: 0, offsetY: 0 };
+        this.viewConstraints = { minScale: 0.2, maxScale: 10, margin: 20 };
+        
         // Configurable box dimensions
         this.boxDimensions = {
             width: 700,
@@ -124,7 +128,12 @@ export class DesignerUI {
 
     render() {
         console.log('[DesignerUI.render] Rendering mechanism. Animated state:', this.animatedState ? 'present' : 'none');
+        // Clear with identity transform
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Apply view transform for drawing world coordinates
+        this.ctx.save();
+        this.ctx.setTransform(this.view.scale, 0, 0, this.view.scale, this.view.offsetX, this.view.offsetY);
         const baseRect = this.getBaseRect();
         this.drawBoxBase(this.ctx, baseRect);
         this.drawBottomLeftCornerPath();
@@ -151,6 +160,8 @@ export class DesignerUI {
         this.drawPivot(pivotsToDraw.D, 'blue', 'D');
         this.drawPivot(pivotsToDraw.B, 'red', 'B');
         this.drawPivot(pivotsToDraw.C, 'green', 'C');
+        // Restore transform
+        this.ctx.restore();
     }
 
     drawBoxBase(ctx, base) {
@@ -522,6 +533,103 @@ export class DesignerUI {
         };
     }
 
+    // --- View helpers ---
+    worldToScreen(wx, wy) {
+        return {
+            x: wx * this.view.scale + this.view.offsetX,
+            y: wy * this.view.scale + this.view.offsetY
+        };
+    }
+    screenToWorld(sx, sy) {
+        const inv = 1 / this.view.scale;
+        return {
+            x: (sx - this.view.offsetX) * inv,
+            y: (sy - this.view.offsetY) * inv
+        };
+    }
+
+    // Zoom utilities
+    zoomBy(factor, centerX = this.canvas.width / 2, centerY = this.canvas.height / 2) {
+        const clamped = Math.max(this.viewConstraints.minScale, Math.min(this.viewConstraints.maxScale, this.view.scale * factor));
+        const centerWorld = this.screenToWorld(centerX, centerY);
+        this.view.scale = clamped;
+        this.view.offsetX = centerX - centerWorld.x * this.view.scale;
+        this.view.offsetY = centerY - centerWorld.y * this.view.scale;
+        this.updateAndRender();
+    }
+    zoomIn() { this.zoomBy(1.25); }
+    zoomOut() { this.zoomBy(0.8); }
+
+    // Compute bounds of the entire motion (base + lid across angle range)
+    computeMotionBounds() {
+        const base = this.getBaseRect();
+        let minX = base.minX, maxX = base.maxX, minY = base.minY, maxY = base.maxY;
+
+        // Include closed lid rectangle
+        const closedCorners = this.getLidCornersWorld(this.initialLidTransform.center, this.initialLidTransform.angle);
+        for (const p of closedCorners) {
+            minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+            minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+        }
+
+        // Sample across valid motion
+        const min = (this.angleLimits && Number.isFinite(this.angleLimits.min)) ? this.angleLimits.min : 0;
+        const max = (this.angleLimits && Number.isFinite(this.angleLimits.max)) ? this.angleLimits.max : 0;
+        if (min !== max) {
+            const { B: B0, C: C0 } = this.initialPivots || this.mechanism.pivots;
+            const samples = 180; // balanced resolution
+            const savedLastValidC = this.lastValidC;
+            for (let i = 0; i <= samples; i++) {
+                const t = i / samples;
+                const angle = min + t * (max - min);
+                const state = this.calculateAnimatedStateForAngle(angle);
+                if (state && B0 && C0) {
+                    const tr = FourBarLinkageCalculator.getTransform(B0, C0, state.B, state.C);
+                    const corners = this.getLidCornersWorld(
+                        FourBarLinkageCalculator.applyTransform(this.initialLidTransform.center, tr),
+                        this.initialLidTransform.angle + tr.angle
+                    );
+                    for (const p of corners) {
+                        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                        minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+                    }
+                }
+            }
+            this.lastValidC = savedLastValidC;
+        }
+        return { minX, minY, maxX, maxY };
+    }
+
+    getLidCornersWorld(center, angle) {
+        const hw = this.lidWidth / 2;
+        const hh = this.lidHeight / 2;
+        const local = [
+            { x: -hw, y: -hh }, // TL
+            { x:  hw, y: -hh }, // TR
+            { x:  hw, y:  hh }, // BR
+            { x: -hw, y:  hh }  // BL
+        ];
+        const ca = Math.cos(angle), sa = Math.sin(angle);
+        return local.map(p => ({
+            x: center.x + p.x * ca - p.y * sa,
+            y: center.y + p.x * sa + p.y * ca
+        }));
+    }
+
+    fitView() {
+        const bounds = this.computeMotionBounds();
+        const margin = this.viewConstraints.margin;
+        const width = Math.max(1, bounds.maxX - bounds.minX);
+        const height = Math.max(1, bounds.maxY - bounds.minY);
+        const scaleX = (this.canvas.width - 2 * margin) / width;
+        const scaleY = (this.canvas.height - 2 * margin) / height;
+        const targetScale = Math.max(this.viewConstraints.minScale, Math.min(this.viewConstraints.maxScale, Math.min(scaleX, scaleY)));
+        this.view.scale = targetScale;
+        this.view.offsetX = margin - bounds.minX * targetScale;
+        this.view.offsetY = margin - bounds.minY * targetScale;
+        this.updateAndRender();
+    }
+
     handleMouseDown(e) {
         const rect = this.canvas.getBoundingClientRect();
         // Calculate scaling factors to account for CSS resizing
@@ -530,15 +638,16 @@ export class DesignerUI {
         // Apply scaling to get correct canvas coordinates
         const x = (e.clientX - rect.left) * scaleX;
         const y = (e.clientY - rect.top) * scaleY;
+        const world = this.screenToWorld(x, y);
         
-        const hitResult = this.hitTest(x, y);
+        const hitResult = this.hitTest(world.x, world.y);
 
         if (hitResult.hit) {
             this.dragState = {
                 isDragging: true,
                 pivotName: hitResult.pivotName,
-                startX: x,
-                startY: y,
+                startX: world.x,
+                startY: world.y,
                 scaleX: scaleX,
                 scaleY: scaleY
             };
@@ -553,8 +662,10 @@ export class DesignerUI {
         const scaleX = this.dragState.scaleX || this.canvas.width / rect.width;
         const scaleY = this.dragState.scaleY || this.canvas.height / rect.height;
         // Apply scaling to get correct canvas coordinates
-        let x = (e.clientX - rect.left) * scaleX;
-        let y = (e.clientY - rect.top) * scaleY;
+        let sx = (e.clientX - rect.left) * scaleX;
+        let sy = (e.clientY - rect.top) * scaleY;
+        // Convert to world coordinates (accounting for view transform)
+        let { x, y } = this.screenToWorld(sx, sy);
         const { pivotName } = this.dragState;
 
         if (pivotName === 'A' || pivotName === 'D') {
@@ -839,7 +950,7 @@ export class DesignerUI {
     }
 
     hitTest(x, y) {
-        const tolerance = 10;
+        const tolerance = 12 / Math.max(0.001, this.view.scale);
         for (const name in this.mechanism.pivots) {
             const pivot = this.mechanism.pivots[name];
             if (!pivot || typeof pivot.x === 'undefined' || typeof pivot.y === 'undefined') continue;

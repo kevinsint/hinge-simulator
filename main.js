@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const lidAngleSlider = document.getElementById('lidAngle');
     const lidAngleValue = document.getElementById('lidAngleValue');
     const unlockHingeCheckbox = document.getElementById('unlockHinge');
+    // Fit control
+    const fitBtn = document.getElementById('fitBtn');
     
     // Box dimension controls
     const boxWidthInput = document.getElementById('boxWidth');
@@ -444,6 +446,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Setup units toggle and dimension inputs after simulator is initialized
     setupUnitsToggle();
     setupDimensionInputs();
+
+    // Fit control handler
+    if (fitBtn) {
+        fitBtn.addEventListener('click', () => {
+            if (activeSimulator && typeof activeSimulator.fitView === 'function') {
+                activeSimulator.fitView();
+            }
+        });
+    }
     
     // Double-check if slider is properly initialized
     setTimeout(() => {
