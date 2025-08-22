@@ -15,6 +15,9 @@ export class DesignerUI {
         // What is this?
         this.lastValidC = null;
         this.hingeUnlocked = false;
+        // Editing vs simulation state
+        this.editMode = false; // false => simulation (angle slider only), true => pivot editing
+        this.pendingUIEvent = null; // ephemeral UI event for host (e.g., reset angle)
         
         // View transform (world -> screen)
         this.view = { scale: 1, offsetX: 0, offsetY: 0 };
@@ -122,8 +125,11 @@ export class DesignerUI {
         this.lastResult = {
             pivots: this.mechanism.pivots,
             isValid: pivotsValid && isCrossed,
-            relativePivots: this.getRelativePivotPositions()
+            relativePivots: this.getRelativePivotPositions(),
+            uiEvent: this.pendingUIEvent
         };
+        // Clear one-shot UI event after consumption
+        this.pendingUIEvent = null;
         this.render();
         this.onStateChange(this.lastResult);
         return this.lastResult;
@@ -359,6 +365,8 @@ export class DesignerUI {
         console.log('[DesignerUI.animate] Animation requested with angleOffset:', angleOffset);
         console.log('[DesignerUI.animate] Current pivots:', JSON.stringify(this.mechanism.pivots));
         console.log('[DesignerUI.animate] Current angleLimits:', JSON.stringify(this.angleLimits));
+        // Enter simulation mode when animating
+        this.editMode = false;
         
         // Only reset if any pivot is truly missing (null or undefined)
         const pivots = this.mechanism && this.mechanism.pivots;
@@ -634,6 +642,16 @@ export class DesignerUI {
     }
 
     handleMouseDown(e) {
+        // If not in edit mode yet, the first click switches to edit mode and resets animation.
+        if (!this.editMode) {
+            this.editMode = true;
+            this.animatedState = null; // stop animation / blue state
+            // Ask host UI to reset the angle slider to 0 without triggering animate()
+            this.pendingUIEvent = { type: 'resetAngle' };
+            this.updateAndRender();
+            return; // First click only toggles to edit mode; next click can start dragging
+        }
+
         const rect = this.canvas.getBoundingClientRect();
         // Calculate scaling factors to account for CSS resizing
         const scaleX = this.canvas.width / rect.width;

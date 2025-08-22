@@ -155,6 +155,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusDiv.textContent = `Angle limits: min ${minDeg}°, max ${maxDeg}° – linkage is ${validRange ? 'animatable' : 'locked'}.`;
             }
 
+            // Handle one-shot UI events from DesignerUI
+            if (result && result.uiEvent && result.uiEvent.type === 'resetAngle') {
+                // Reset slider without dispatching input (avoid triggering animate)
+                lastValidPct = 0;
+                lidAngleSliderRef.value = '0';
+                lidAngleValue.textContent = '0°';
+            }
+
             // Update pivot positions if available
             if (result && result.relativePivots) {
                 const { A, B, C, D } = result.relativePivots;
