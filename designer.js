@@ -757,87 +757,96 @@ export class DesignerUI {
         // Preserve continuity anchor while probing limits
         const savedLastValidC_global = this.lastValidC;
 
-        // Helper function to find the limit in one direction using binary search for high precision.
+        // Robust limit finder: first bracket the boundary, then binary-search it.
         const findLimit = (direction, startAngle = 0) => {
-            console.log(`[findLimit] Starting search in direction: ${direction} from angle: ${startAngle}, unlocked: ${this.hingeUnlocked}`);
-            let low = startAngle;
-            let high = startAngle + Math.PI * 2 * direction;
-            let best = startAngle;
-            let validFound = false;
+            console.log(`[findLimit] Start dir=${direction}, unlocked=${this.hingeUnlocked}`);
+            const MAX_SWEEP = (this.hingeUnlocked ? Math.PI * 4 : Math.PI * 2);
+            const stepSign = direction >= 0 ? 1 : -1;
 
-            // When unlocked, extend search range to find straight line configuration
-            if (this.hingeUnlocked) {
-                high = startAngle + Math.PI * 4 * direction; // Extend search range
+            // Maintain local continuity so we stay on the same kinematic branch.
+            let localAnchor = savedLastValidC_global;
+            const tryAngle = (ang) => {
+                this.lastValidC = localAnchor;
+                const state = this.calculateAnimatedStateForAngle(ang);
+                if (state) {
+                    localAnchor = state.C;
+                    return true;
+                }
+                return false;
+            };
+
+            // Sanity: the closed pose should be valid.
+            let lastValid = startAngle;
+            if (!tryAngle(lastValid)) {
+                console.warn('[findLimit] Closed pose invalid — returning 0');
+                return 0;
             }
 
-            // Perform binary search for a fixed number of iterations to find the limit with high precision.
-            for (let i = 0; i < 100; i++) {
-                const mid = low + (high - low) / 2;
-                if (Math.abs(mid - best) < 0.0001) {
-                    console.log(`[findLimit] Converged at iteration ${i}, best: ${best}`);
-                    break; // Converged
-                }
-
-                const result = this.calculateAnimatedStateForAngle(mid);
-                console.log(`[findLimit] Iteration ${i}, angle: ${mid.toFixed(4)}, valid: ${!!result}`);
-                
-                if (result) {
-                    validFound = true;
-                    best = mid; // This angle is valid, try for a larger one (in magnitude)
-                    if (direction > 0) {
-                        low = mid;
-                    } else {
-                        high = mid;
-                    }
+            // Exponentially expand until we hit an invalid pose or exceed MAX_SWEEP.
+            let step = 0.01; // ~0.57°
+            let firstInvalid = null;
+            while (Math.abs(lastValid + stepSign * step) <= MAX_SWEEP + 1e-9) {
+                const testAngle = lastValid + stepSign * step;
+                if (tryAngle(testAngle)) {
+                    lastValid = testAngle;
+                    step *= 2; // expand faster while valid
                 } else {
-                    if (direction > 0) {
-                        high = mid; // This angle is invalid, the limit is in the lower half
-                    } else {
-                        low = mid;
-                    }
-                }
-                
-                // Break early if we've narrowed down enough
-                if (Math.abs(high - low) < 0.0001) {
-                    console.log(`[findLimit] Precision threshold reached at iteration ${i}`);
+                    firstInvalid = testAngle;
                     break;
                 }
             }
-            
-            console.log(`[findLimit] Final result for direction ${direction}: ${best.toFixed(4)}, valid found: ${validFound}`);
-            return best;
+
+            // If never found invalid inside sweep bound, clamp at bound and refine if needed
+            if (firstInvalid === null) {
+                const boundAngle = stepSign * MAX_SWEEP;
+                if (!tryAngle(boundAngle)) {
+                    firstInvalid = boundAngle;
+                } else {
+                    lastValid = boundAngle;
+                }
+            }
+
+            // If still no invalid found, return lastValid
+            if (firstInvalid === null) {
+                console.log(`[findLimit] No invalid found within sweep, limit=${lastValid.toFixed(4)}`);
+                return lastValid;
+            }
+
+            // Binary search between lastValid (valid) and firstInvalid (invalid)
+            let loValid = lastValid;
+            let hiInvalid = firstInvalid;
+            for (let i = 0; i < 80; i++) {
+                const mid = loValid + (hiInvalid - loValid) / 2;
+                if (tryAngle(mid)) {
+                    loValid = mid;
+                } else {
+                    hiInvalid = mid;
+                }
+                if (Math.abs(hiInvalid - loValid) < 1e-4) break;
+            }
+            console.log(`[findLimit] Final limit dir=${direction}: ${loValid.toFixed(4)}`);
+            return loValid;
         };
 
-        // Probe both directions; choose the one that yields greater vertical clearance of lid bottom from base top (visual 'opening')
+        // Compute limits in both directions (diagnostic), but enforce negative opening per policy
         const maxPositive = findLimit(1, 0);
         const maxNegative = findLimit(-1, 0);
 
-        const baseRectForEval = this.getBaseRect();
-        const { B: B0, C: C0 } = this.initialPivots || this.mechanism.pivots;
-        const bottomCenterLocal = { x: 0, y: this.lidHeight / 2 };
-
-        const clearanceAt = (angle) => {
-            if (!Number.isFinite(angle) || angle === 0) return 0;
-            const state = this.calculateAnimatedStateForAngle(angle);
-            if (!state || !B0 || !C0) return -Infinity;
-            const tr = FourBarLinkageCalculator.getTransform(B0, C0, state.B, state.C);
-            const bottomCenterWorld = FourBarLinkageCalculator.applyTransform({
-                x: this.initialLidTransform.center.x + bottomCenterLocal.x,
-                y: this.initialLidTransform.center.y + bottomCenterLocal.y
-            }, tr);
-            // Canvas Y grows downward; larger positive value means bottom edge is farther above base top
-            const clearance = baseRectForEval.minY - bottomCenterWorld.y;
-            return clearance;
-        };
-
-        const clearancePos = clearanceAt(maxPositive);
-        const clearanceNeg = clearanceAt(maxNegative);
-        const openingLimit = clearancePos >= clearanceNeg ? maxPositive : maxNegative;
+        // Enforce policy: always open up-and-left (negative angle direction)
+        // Prefer computed negative limit; fallback to -|positive| if needed.
+        let openingLimit;
+        if (Number.isFinite(maxNegative) && maxNegative < 0) {
+            openingLimit = maxNegative;
+        } else if (Number.isFinite(maxPositive)) {
+            openingLimit = -Math.abs(maxPositive);
+        } else {
+            openingLimit = 0;
+        }
 
         const minAngle = 0;
         const maxAngle = openingLimit;
 
-        console.log(`[calculateAngleLimits] Results (closed->open by-clearance): min=${minAngle.toFixed(4)}, max=${maxAngle.toFixed(4)}, clearPos=${clearancePos.toFixed(2)}, clearNeg=${clearanceNeg.toFixed(2)}`);
+        console.log(`[calculateAngleLimits] Results (forced up-left): min=${minAngle.toFixed(4)}, max=${maxAngle.toFixed(4)}`);
         this.angleLimits = { min: minAngle, max: maxAngle };
 
         // Restore continuity anchor
