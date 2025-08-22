@@ -12,15 +12,27 @@ export class DesignerUI {
         this.mechanism = { pivots: {} };
         this.angleLimits = { min: -Math.PI / 2, max: Math.PI / 2 };
         this.initialOrientations = {};
+        // What is this?
         this.lastValidC = null;
         this.hingeUnlocked = false;
         
         // Configurable box dimensions
         this.boxDimensions = {
-            width: 900,
-            baseHeight: 300,
+            width: 700,
+            baseHeight: 100,
             lidHeight: 100,
-            lidGap: 20
+            lidGap: 100
+        };
+
+        // Configurable pivot placement as percentages within base/lid
+        // Values in [0,1]; baseY measured from baseRect.minY (top of base), lidY from lid top
+        this.pivotPlacement = {
+            baseXLeft: 0.30,
+            baseXRight: 0.70,
+            baseY: 0.30,
+            lidXLeft: 0.25,
+            lidXRight: 0.75,
+            lidY: 0.50
         };
 
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
@@ -42,11 +54,28 @@ export class DesignerUI {
             angle: 0
         };
 
+        // Place pivots within constraints based on current box dimensions
+        // Base pivots (A, D) inside base rectangle near the top edge
+        const baseWidth = baseRect.maxX - baseRect.minX;
+        const baseHeight = baseRect.maxY - baseRect.minY;
+        const ax = baseRect.minX + baseWidth * this.pivotPlacement.baseXLeft;
+        const dx = baseRect.minX + baseWidth * this.pivotPlacement.baseXRight;
+        const ay = baseRect.minY + baseHeight * this.pivotPlacement.baseY; // near top of base
+        const dy = ay;
+
+        // Lid pivots (B, C) inside lid rectangle using percentage placement
+        const lidMinX = lidCenterX - this.lidWidth / 2;
+        const lidMinY = lidCenterY - this.lidHeight / 2;
+        const bx = lidMinX + this.lidWidth * this.pivotPlacement.lidXRight;
+        const cx = lidMinX + this.lidWidth * this.pivotPlacement.lidXLeft;
+        const by = lidMinY + this.lidHeight * this.pivotPlacement.lidY;
+        const cy = by;
+
         this.mechanism.pivots = {
-            A: { x: 250, y: 500 },
-            D: { x: 550, y: 500 },
-            B: { x: lidCenterX + 100, y: lidCenterY },
-            C: { x: lidCenterX - 100, y: lidCenterY }
+            A: { x: ax, y: ay },
+            D: { x: dx, y: dy },
+            B: { x: bx, y: by },
+            C: { x: cx, y: cy }
         };
 
         this.initialPivots = JSON.parse(JSON.stringify(this.mechanism.pivots));
@@ -709,6 +738,25 @@ export class DesignerUI {
                 center: { x: lidCenterX, y: lidCenterY },
                 angle: 0
             };
+            
+            // Clamp pivots to stay within their constraints after resize
+            const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+            // Base clamp for A, D
+            this.mechanism.pivots.A.x = clamp(this.mechanism.pivots.A.x, newBaseRect.minX, newBaseRect.maxX);
+            this.mechanism.pivots.A.y = clamp(this.mechanism.pivots.A.y, newBaseRect.minY, newBaseRect.maxY);
+            this.mechanism.pivots.D.x = clamp(this.mechanism.pivots.D.x, newBaseRect.minX, newBaseRect.maxX);
+            this.mechanism.pivots.D.y = clamp(this.mechanism.pivots.D.y, newBaseRect.minY, newBaseRect.maxY);
+            // Lid clamp for B, C
+            const lidRect = {
+                minX: this.initialLidTransform.center.x - this.lidWidth / 2,
+                maxX: this.initialLidTransform.center.x + this.lidWidth / 2,
+                minY: this.initialLidTransform.center.y - this.lidHeight / 2,
+                maxY: this.initialLidTransform.center.y + this.lidHeight / 2
+            };
+            this.mechanism.pivots.B.x = clamp(this.mechanism.pivots.B.x, lidRect.minX, lidRect.maxX);
+            this.mechanism.pivots.B.y = clamp(this.mechanism.pivots.B.y, lidRect.minY, lidRect.maxY);
+            this.mechanism.pivots.C.x = clamp(this.mechanism.pivots.C.x, lidRect.minX, lidRect.maxX);
+            this.mechanism.pivots.C.y = clamp(this.mechanism.pivots.C.y, lidRect.minY, lidRect.maxY);
             
             // Update pivot offsets
             this.pivotOffsets = {
